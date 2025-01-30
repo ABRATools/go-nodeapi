@@ -1,0 +1,22 @@
+services:
+  go-api-db:
+    env_file:
+      - db.env
+    container_name: go-api-db
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./initdb.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d postgres" ]
+      interval: 30s
+      timeout: 10s
+  go-api:
+    depends_on:
+      - go-api-db
+    container_name: go-api
+    build: .
+    ports:
+      - "8888:8888"

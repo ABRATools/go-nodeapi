@@ -39,7 +39,4 @@ sudo dnf -y install conmon containers-common crun iptables netavark nftables sli
 # Install Podman
 sudo dnf install podman -y
 # Install Go
-dnf install golang -y
-export GOPATH=$HOME/go
-export PATH=$PATH:$GOPATH/bin
-sed -i 's/PATH=$PATH:$HOME\/.local\/bin\/:$HOME\/bin/PATH=$PATH:$HOME\/.local\/bin\/:$HOME\/bin:$GOPATH\/bin/' ~/.bashrc
+echo "Install the latest version of Go from the official website!"

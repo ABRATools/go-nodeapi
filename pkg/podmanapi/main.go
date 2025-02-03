@@ -40,38 +40,46 @@ func InitPodmanConnection() (context.Context, error) {
 	return podmanctx, nil
 }
 
-type ContainerStatus struct {
-	ID    string
-	Image string
-	State string
+type PodmanContainer struct {
+	ID        string   `json:"id"`
+	Image     string   `json:"image"`
+	Names     []string `json:"names"`
+	State     string   `json:"state"`
+	StartedAt int64    `json:"started_at"`
 }
 
-func ListPodmanContainers(ctx context.Context) []ContainerStatus {
+type PodmanContainerStatus struct {
+	ID    string `json:"id"`
+	State string `json:"state"`
+}
+
+func ListPodmanContainers(ctx context.Context) []PodmanContainer {
 	fmt.Println("Listing containers...")
 	ctrList, err := containers.List(ctx, &containers.ListOptions{})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	var ctrStatusList []ContainerStatus
+	var ctrStatusList []PodmanContainer
 	for _, ctr := range ctrList {
 		// ctrData, err := containers.Inspect(ctx, ctr.ID, &containers.InspectOptions{})
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		ctrStatusList = append(ctrStatusList, ContainerStatus{
-			ID:    ctr.ID,
-			Image: ctr.Image,
-			State: ctr.Status,
+		ctrStatusList = append(ctrStatusList, PodmanContainer{
+			ID:        ctr.ID,
+			Image:     ctr.Image,
+			Names:     ctr.Names,
+			State:     ctr.State,
+			StartedAt: ctr.StartedAt,
 		})
 	}
 
 	return ctrStatusList
 }
 
-func StartPodmanContainer(ctx context.Context, containerID string) ContainerStatus {
+func StartPodmanContainer(ctx context.Context, containerID string) PodmanContainerStatus {
 	fmt.Println("Starting container...")
 	err := containers.Start(ctx, containerID, &containers.StartOptions{})
 	if err != nil {
@@ -93,14 +101,13 @@ func StartPodmanContainer(ctx context.Context, containerID string) ContainerStat
 		os.Exit(1)
 	}
 
-	return ContainerStatus{
+	return PodmanContainerStatus{
 		ID:    containerID,
-		Image: ctrData.ImageName,
 		State: ctrData.State.Status,
 	}
 }
 
-func StopPodmanContainer(ctx context.Context, containerID string) ContainerStatus {
+func StopPodmanContainer(ctx context.Context, containerID string) PodmanContainerStatus {
 	fmt.Println("Stopping container...")
 	err := containers.Stop(ctx, containerID, &containers.StopOptions{})
 	if err != nil {
@@ -122,9 +129,8 @@ func StopPodmanContainer(ctx context.Context, containerID string) ContainerStatu
 		os.Exit(1)
 	}
 
-	return ContainerStatus{
+	return PodmanContainerStatus{
 		ID:    containerID,
-		Image: ctrData.ImageName,
 		State: ctrData.State.Status,
 	}
 }

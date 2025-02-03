@@ -26,14 +26,16 @@ metadata_expire=6h
 countme=1
 enabled=1
 EOF
-
 # Update the kernel to the latest from the repository added.
 dnf update
-
-# Install the btrfs-progs package to add needed utilities for interacting with BTRFS file systems.
-dnf install btrfs-progs
-# Install Podman dependencies
-sudo dnf -y install conmon containers-common crun iptables netavark nftables slirp4netns btrfs-progs
+# Install Podman build dependencies
+sudo dnf -y install 'dnf-command(builddep)'
+dnf config-manager --set-enabled crb
+# Install Podman build dependencies
+sudo dnf -y install epel-release
+sudo dnf -y gcc glib2-devel glibc-devel glibc-static golang git-core go-rpm-macros gpgme-devel libassuan-devel libgpg-error-devel libseccomp-devel libselinux-devel shadow-utils-subid-devel pkgconfig make man-db ostree-devel systemd systemd-devel
+# Install Podman runtime dependencies
+sudo dnf -y install conmon containers-common crun iptables netavark nftables slirp4netns btrfs-progs btrfs-progs-devel pgpme-devel libassuan libgpg-error libseccomp libselinux shadow-utils
 # Install Podman
 sudo dnf install podman -y
 # Install Go

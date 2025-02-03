@@ -22,6 +22,7 @@ func main() {
 	router.Use(gin.Recovery())
 
 	routes.RegisterCentralRoutes(router)
+	routes.RegisterAPIRoutes(router)
 
 	server := &http.Server{
 		Addr:         ":8888",

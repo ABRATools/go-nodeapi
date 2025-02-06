@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
@@ -14,6 +15,8 @@ import (
 func ptr[T any](t T) *T {
 	return &t
 }
+
+var timeout uint = 10
 
 type Container struct {
 	ID string
@@ -118,14 +121,35 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 
 func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
 	fmt.Println("Stopping container...")
-	err := containers.Stop(ctx, containerID, &containers.StopOptions{})
+
+	err := containers.Stop(ctx, containerID, &containers.StopOptions{
+		Ignore:  ptr(false),
+		Timeout: &timeout,
+	})
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}
 
-	_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
-		Condition: []define.ContainerStatus{define.ContainerStateRunning},
-	})
+	ret := make(chan bool)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go func() {
+		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+			Condition: []define.ContainerStatus{define.ContainerStateRunning},
+		})
+		if err != nil {
+			fmt.Println(err)
+		}
+		ret <- true
+	}()
+
+	select {
+	case <-ret:
+		break
+	case <-ctx.Done():
+		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to stop")
+	}
+
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}

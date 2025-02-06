@@ -101,16 +101,39 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 
 func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
 	fmt.Println("Starting container...")
+
+	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+	if testContainerErr != nil {
+		return PodmanContainerStatus{}, testContainerErr
+	}
+
+	if contData.State.Status == define.ContainerStateRunning.String() {
+		return PodmanContainerStatus{}, fmt.Errorf("Container is already running")
+	}
+
 	err := containers.Start(ctx, containerID, &containers.StartOptions{})
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}
 
-	_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
-		Condition: []define.ContainerStatus{define.ContainerStateRunning},
-	})
-	if err != nil {
-		return PodmanContainerStatus{}, err
+	ret := make(chan bool)
+	startContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go func() {
+		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+			Condition: []define.ContainerStatus{define.ContainerStateRunning},
+		})
+		if err != nil {
+			fmt.Println(err)
+		}
+		ret <- true
+	}()
+
+	select {
+	case <-ret:
+		break
+	case <-startContext.Done():
+		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to start")
 	}
 
 	ctrData, err := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
@@ -127,6 +150,15 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
 	fmt.Println("Stopping container...")
 
+	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+	if testContainerErr != nil {
+		return PodmanContainerStatus{}, testContainerErr
+	}
+
+	if contData.State.Status == define.ContainerStateStopped.String() {
+		return PodmanContainerStatus{}, fmt.Errorf("Container is already stopped")
+	}
+
 	err := containers.Stop(ctx, containerID, &containers.StopOptions{
 		Ignore:  ptr(false),
 		Timeout: &timeout,
@@ -136,11 +168,11 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	}
 
 	ret := make(chan bool)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	stopContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	go func() {
 		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
-			Condition: []define.ContainerStatus{define.ContainerStateRunning},
+			Condition: []define.ContainerStatus{define.ContainerStateStopped},
 		})
 		if err != nil {
 			fmt.Println(err)
@@ -151,7 +183,7 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	select {
 	case <-ret:
 		break
-	case <-ctx.Done():
+	case <-stopContext.Done():
 		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to stop")
 	}
 

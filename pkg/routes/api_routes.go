@@ -18,6 +18,7 @@ func RegisterAPIRoutes(router *gin.Engine) {
 			podmanContainers, err := podmanapi.ListPodmanContainers(podmanContext)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error getting Podman Containers: %v", err)
+				return
 			}
 			c.JSON(http.StatusOK, podmanContainers)
 		})
@@ -30,6 +31,7 @@ func RegisterAPIRoutes(router *gin.Engine) {
 			status, err := podmanapi.StopPodmanContainer(podmanContext, id)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error stopping Podman Containers: %v", err)
+				return
 			}
 			c.JSON(http.StatusOK, status)
 		})
@@ -42,6 +44,7 @@ func RegisterAPIRoutes(router *gin.Engine) {
 			status, err := podmanapi.StartPodmanContainer(podmanContext, id)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error starting Podman Containers: %v", err)
+				return
 			}
 			c.JSON(http.StatusOK, status)
 		})

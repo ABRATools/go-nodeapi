@@ -17,6 +17,7 @@ func ptr[T any](t T) *T {
 }
 
 var timeout uint = 10
+var podmanctx context.Context
 
 type Container struct {
 	ID string
@@ -28,6 +29,10 @@ func InitPodmanConnection() (context.Context, error) {
 		sock_dir = "/var/run"
 	}
 	socket := "unix:" + sock_dir + "/podman/podman.sock"
+
+	if podmanctx != nil {
+		return podmanctx, nil
+	}
 
 	podmanctx, err := bindings.NewConnection(context.Background(), socket)
 	if err != nil {

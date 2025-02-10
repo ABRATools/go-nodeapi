@@ -81,8 +81,8 @@ func GenerateNginxConfig(nginxConfig NginxConfig) error {
 		return err
 	}
 	tmpl, err := template.New("nginx").Parse(`
-	{{ range $port, $path := .PortMap }}
-	location /{{ $path }} {
+	{{ range $port, $endpoint := .PortMap }}
+	location /{{ $.Path }}/{{ $endpoint }}/ {
 		proxy_pass http://{{ $.IP }}:{{ $port }};
 		proxy_set_header Host $host;
 		proxy_set_header X-Real-IP $remote_addr;
@@ -132,4 +132,24 @@ func ReloadNginx() error {
 		return err
 	}
 	return nil
+}
+
+func main() {
+	portmap := map[uint]string{
+		5801: "novnc",
+		7681: "ttyd",
+	}
+	nginxConfig := NginxConfig{
+		Path:    "test",
+		IP:      "192.168.200.2",
+		PortMap: portmap,
+	}
+	err := GenerateNginxConfig(nginxConfig)
+	if err != nil {
+		panic(err)
+	}
+	err = ReloadNginx()
+	if err != nil {
+		panic(err)
+	}
 }

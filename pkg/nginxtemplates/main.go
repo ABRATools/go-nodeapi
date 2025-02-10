@@ -3,6 +3,8 @@ package nginxtemplates
 import (
 	"os"
 	"text/template"
+
+	"github.com/sonarping/go-nodeapi/pkg/systemd"
 )
 
 const centralNginxConfigPath = "/etc/nginx/sites-enabled/abra-central.conf"
@@ -25,8 +27,8 @@ func createConfigPath() error {
 
 func generateCentralNginxConfig() error {
 	fileCheck, err := os.Stat(centralNginxConfigPath)
-	if err != nil {
-		return err
+	if err == nil {
+		return nil
 	}
 	if fileCheck != nil {
 		return nil
@@ -34,8 +36,8 @@ func generateCentralNginxConfig() error {
 
 	// Check if the directory exists, if not create it
 	foldercheck, err := os.Stat(nginxConfigPath)
-	if err != nil {
-		return err
+	if err == nil {
+		return nil
 	}
 	if foldercheck == nil {
 		err = createConfigPath()
@@ -123,33 +125,9 @@ func GenerateNginxConfig(nginxConfig NginxConfig) error {
 }
 
 func ReloadNginx() error {
-	_, err := os.Stat("/var/run/nginx.pid")
-	if err != nil {
-		return err
-	}
-	err = os.Remove("/var/run/nginx.pid")
+	err := systemd.ReloadUnit("nginx.service", "replace")
 	if err != nil {
 		return err
 	}
 	return nil
-}
-
-func main() {
-	portmap := map[uint]string{
-		5801: "novnc",
-		7681: "ttyd",
-	}
-	nginxConfig := NginxConfig{
-		Path:    "test",
-		IP:      "192.168.200.2",
-		PortMap: portmap,
-	}
-	err := GenerateNginxConfig(nginxConfig)
-	if err != nil {
-		panic(err)
-	}
-	err = ReloadNginx()
-	if err != nil {
-		panic(err)
-	}
 }

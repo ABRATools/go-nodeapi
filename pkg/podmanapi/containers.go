@@ -9,15 +9,11 @@ import (
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
+	"github.com/sonarping/go-nodeapi/pkg/utils"
 )
 
-// ptr is a helper function to return a pointer to a value
-func ptr[T any](t T) *T {
-	return &t
-}
-
 var timeout uint = 10
-var podmanctx context.Context
+var Podmanctx context.Context
 
 type Container struct {
 	ID string
@@ -30,16 +26,16 @@ func InitPodmanConnection() (context.Context, error) {
 	}
 	socket := "unix:" + sock_dir + "/podman/podman.sock"
 
-	if podmanctx != nil {
-		return podmanctx, nil
+	if Podmanctx != nil {
+		return Podmanctx, nil
 	}
 
-	podmanctx, err := bindings.NewConnection(context.Background(), socket)
+	Podmanctx, err := bindings.NewConnection(context.Background(), socket)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
 	}
-	return podmanctx, nil
+	return Podmanctx, nil
 }
 
 type PodmanContainer struct {
@@ -160,7 +156,7 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	}
 
 	err := containers.Stop(ctx, containerID, &containers.StopOptions{
-		Ignore:  ptr(false),
+		Ignore:  utils.GetPtr(false),
 		Timeout: &timeout,
 	})
 	if err != nil {
@@ -200,4 +196,29 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 		ID:    containerID,
 		State: ctrData.State.Status,
 	}, nil
+}
+
+func InspectNetwork(ctx context.Context, containerID string) (map[string]string, error) {
+	inspectData, err := containers.Inspect(ctx, containerID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	networks := make(map[string]string, 0)
+
+	if inspectData.NetworkSettings != nil && inspectData.NetworkSettings.Networks != nil {
+		for networkName, networkData := range inspectData.NetworkSettings.Networks {
+			if networkData.IPAddress != "" {
+				fmt.Printf("Container IP Address: %s\n", networkData.IPAddress)
+				networks[networkName] = networkData.IPAddress
+			}
+		}
+	} else if inspectData.NetworkSettings != nil {
+		fmt.Printf("Container IP Address: %s\n", inspectData.NetworkSettings.IPAddress)
+		networks["default"] = inspectData.NetworkSettings.IPAddress
+	} else {
+		fmt.Println("No network settings found for container")
+		return nil, nil
+	}
+	return networks, nil
 }

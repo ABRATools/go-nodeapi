@@ -228,7 +228,7 @@ func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 	// get the IP address of the container
 	// only top-level networks are returned
 
-	if inspectData.NetworkSettings != nil {
+	if inspectData.NetworkSettings == nil {
 		return "", fmt.Errorf("No network settings found for container")
 	}
 	return inspectData.NetworkSettings.IPAddress, nil

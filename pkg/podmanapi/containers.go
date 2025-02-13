@@ -67,7 +67,7 @@ func getMapKeys(m map[uint16][]string) []uint16 {
 
 func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 	fmt.Println("Listing containers...")
-	ctrList, err := containers.List(ctx, &containers.ListOptions{})
+	ctrList, err := containers.List(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
+	"github.com/containers/podman/v5/pkg/specgen"
 	"github.com/sonarping/go-nodeapi/pkg/utils"
 )
 
@@ -196,6 +197,21 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 		ID:    containerID,
 		State: ctrData.State.Status,
 	}, nil
+}
+
+func CreateFromImage(ctx context.Context, imageName string, containerName string) (string, error) {
+	fmt.Println("Creating container...")
+	spec := new(specgen.SpecGenerator)
+	spec.Name = containerName
+	spec.Image = imageName
+	// basic container settings
+
+	ctrData, err := containers.CreateWithSpec(ctx, spec, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return ctrData.ID, nil
 }
 
 func InspectNetwork(ctx context.Context, containerID string) (map[string]string, error) {

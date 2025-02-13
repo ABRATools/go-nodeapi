@@ -21,8 +21,17 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
+	// for later use with auth, etc
 	routes.RegisterCentralRoutes(router)
-	routes.RegisterAPIRoutes(router)
+
+	// for listing, starting, stopping, creating containers
+	routes.RegisterContainerRoutes(router)
+
+	// for listing, building, removing images
+	routes.RegisterImageRoutes(router)
+
+	// for listing, creating, removing networks and adding/removing containers from networks
+	routes.RegisterNetworkingRoutes(router)
 
 	server := &http.Server{
 		Addr:         ":8888",

@@ -7,10 +7,10 @@ import (
 	"github.com/sonarping/go-nodeapi/pkg/podmanapi"
 )
 
-func RegisterAPIRoutes(router *gin.Engine) {
-	api := router.Group("/api")
+func RegisterContainerRoutes(router *gin.Engine) {
+	api := router.Group("/containers")
 	{
-		api.GET("/get-podman-containers", func(c *gin.Context) {
+		api.GET("/list", func(c *gin.Context) {
 			podmanContext, err := podmanapi.InitPodmanConnection()
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
@@ -47,6 +47,27 @@ func RegisterAPIRoutes(router *gin.Engine) {
 				return
 			}
 			c.JSON(http.StatusOK, status)
+		})
+		api.POST("/create", func(c *gin.Context) {
+			// expects data in form-data in the format:
+			// image: <image name>
+			// name: <container name>
+			podmanContext, err := podmanapi.InitPodmanConnection()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
+			}
+			imageName := c.PostForm("image")
+			containerName := c.PostForm("name")
+			if imageName == "" || containerName == "" {
+				c.String(http.StatusBadRequest, "Image and Name are required")
+				return
+			}
+			containerID, err := podmanapi.CreateFromImage(podmanContext, imageName, containerName)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
+				return
+			}
+			c.JSON(http.StatusOK, containerID)
 		})
 	}
 }

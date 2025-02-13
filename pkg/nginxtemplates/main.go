@@ -75,6 +75,9 @@ func DeleteNginxConfig(name string) error {
 	if err := os.Remove(configPath); err != nil {
 		return fmt.Errorf("deleting nginx config %q: %w", configPath, err)
 	}
+	if err := ReloadNginx(); err != nil {
+		return fmt.Errorf("reloading nginx: %w", err)
+	}
 	return nil
 }
 

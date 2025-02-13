@@ -60,6 +60,13 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusInternalServerError, "Error removing Podman Containers: %v", err)
 				return
 			}
+			// remove nginx config
+			err = nginxtemplates.DeleteNginxConfig(id)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error removing Nginx Config: %v", err)
+				return
+			}
+
 			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})
 		})
 		api.POST("/create", func(c *gin.Context) {

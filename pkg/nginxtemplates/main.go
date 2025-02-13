@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	centralNginxConfigPath = "/etc/nginx/sites-enabled/abra-central.conf"
-	nginxConfigDir         = "/etc/nginx/snippets/abra"
+	centralNginxConfigPath    = "/etc/nginx/sites-enabled/abra-central.conf"
+	altCentralNginxConfigPath = "/etc/nginx/default.d/abra-central.conf"
+	nginxConfigDir            = "/etc/nginx/snippets/abra"
 )
 
 // NginxConfig holds the configuration for the Nginx template.
@@ -53,7 +54,11 @@ server {
 	// Create or truncate the central config file.
 	file, err := os.Create(centralNginxConfigPath)
 	if err != nil {
-		return fmt.Errorf("creating central nginx config file: %w", err)
+		fmt.Println("Creating central nginx config file failed, trying alternate path")
+		file, err = os.Create(altCentralNginxConfigPath)
+		if err != nil {
+			return fmt.Errorf("creating central nginx config file: %w", err)
+		}
 	}
 	defer file.Close()
 

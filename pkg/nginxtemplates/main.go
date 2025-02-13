@@ -26,22 +26,10 @@ func createConfigPath() error {
 }
 
 func generateCentralNginxConfig() error {
-	fileCheck, err := os.Stat(centralNginxConfigPath)
-	// if exists, return
-	if err == nil {
-		return nil
-	}
-	// if exists, return
-	if fileCheck != nil {
-		return nil
-	}
-
 	// Check if the directory exists, if not create it
-	foldercheck, err := os.Stat(nginxConfigPath)
-	if err == nil {
-		return nil
-	}
-	if foldercheck == nil {
+	_, err := os.Stat(nginxConfigPath)
+	// if does not exist:
+	if err != nil {
 		err = createConfigPath()
 		if err != nil {
 			return err
@@ -55,12 +43,14 @@ server {
 	include /etc/nginx/snippets/abra/*.conf;
 }
 `)
+	// if error when parsing template return error
 	if err != nil {
 		return err
 	}
 	templateFile, err := os.Create(centralNginxConfigPath)
-	if err != nil {
-		return err
+	// if file already exists, return nil
+	if err == nil {
+		return nil
 	}
 	defer templateFile.Close()
 	err = tmpl.Execute(templateFile, nil)
@@ -80,9 +70,14 @@ func DeleteNginxConfig(path string) error {
 
 // GenerateNginxConfig generates the Nginx configuration file
 func GenerateNginxConfig(nginxConfig NginxConfig) error {
-	err := generateCentralNginxConfig()
+	// test for central config
+	_, err := os.Stat(centralNginxConfigPath)
+	// if not already exists:
 	if err != nil {
-		return err
+		err = generateCentralNginxConfig()
+		if err != nil {
+			return err
+		}
 	}
 	tmpl, err := template.New("nginx").Parse(`
 	{{ range $port, $endpoint := .PortMap }}
@@ -103,11 +98,8 @@ func GenerateNginxConfig(nginxConfig NginxConfig) error {
 	if err != nil {
 		return err
 	}
-	fileCheck, err := os.Stat(nginxConfigPath)
+	_, err = os.Stat(nginxConfigPath)
 	if err != nil {
-		return err
-	}
-	if fileCheck == nil {
 		err = createConfigPath()
 		if err != nil {
 			return err

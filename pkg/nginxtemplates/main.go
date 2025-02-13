@@ -11,7 +11,7 @@ import (
 
 const (
 	centralNginxConfigPath    = "/etc/nginx/sites-enabled/abra-central.conf"
-	altCentralNginxConfigPath = "/etc/nginx/default.d/abra-central.conf"
+	altCentralNginxConfigPath = "/etc/nginx/conf.d/abra-central.conf"
 	nginxConfigDir            = "/etc/nginx/snippets/abra"
 )
 

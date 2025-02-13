@@ -219,6 +219,23 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 	return ctrData.ID, nil
 }
 
+func RemovePodmanContainer(ctx context.Context, containerID string) error {
+	fmt.Println("Removing container...")
+	rmReports, err := containers.Remove(ctx, containerID, &containers.RemoveOptions{
+		Force:   utils.GetPtr(true),
+		Timeout: utils.GetPtr(uint(30)),
+	})
+	for _, report := range rmReports {
+		if report.Err != nil {
+			return report.Err
+		}
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 	inspectData, err := containers.Inspect(ctx, containerID, nil)
 	if err != nil {

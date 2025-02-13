@@ -27,9 +27,11 @@ func createConfigPath() error {
 
 func generateCentralNginxConfig() error {
 	fileCheck, err := os.Stat(centralNginxConfigPath)
+	// if exists, return
 	if err == nil {
 		return nil
 	}
+	// if exists, return
 	if fileCheck != nil {
 		return nil
 	}
@@ -118,6 +120,10 @@ func GenerateNginxConfig(nginxConfig NginxConfig) error {
 	}
 	defer templateFile.Close()
 	err = tmpl.Execute(templateFile, nginxConfig)
+	if err != nil {
+		return err
+	}
+	err = ReloadNginx()
 	if err != nil {
 		return err
 	}

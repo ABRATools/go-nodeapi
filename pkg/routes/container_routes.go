@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sonarping/go-nodeapi/pkg/nginxtemplates"
 	"github.com/sonarping/go-nodeapi/pkg/podmanapi"
 )
 
@@ -48,6 +49,19 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			}
 			c.JSON(http.StatusOK, status)
 		})
+		api.POST("/remove/:id", func(c *gin.Context) {
+			podmanContext, err := podmanapi.InitPodmanConnection()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
+			}
+			id := c.Param("id")
+			err = podmanapi.RemovePodmanContainer(podmanContext, id)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error removing Podman Containers: %v", err)
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})
+		})
 		api.POST("/create", func(c *gin.Context) {
 			// expects data in form-data in the format:
 			// image: <image name>
@@ -72,6 +86,27 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			_, err = podmanapi.StartPodmanContainer(podmanContext, containerID)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error starting Podman Containers: %v", err)
+				return
+			}
+			// get the container IP
+			ip, err := podmanapi.GetIPAddress(podmanContext, containerID)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error getting IP Address of Podman Containers: %v", err)
+				return
+			}
+			// create nginx config
+			// use default portmap for now
+			webConf := nginxtemplates.NginxConfig{
+				Path: containerName,
+				IP:   ip,
+				PortMap: map[uint]string{
+					5801: "novnc",
+					7681: "ttyd",
+				},
+			}
+			err = nginxtemplates.GenerateNginxConfig(webConf)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error generating Nginx Config: %v", err)
 				return
 			}
 			c.JSON(http.StatusOK, containerID)

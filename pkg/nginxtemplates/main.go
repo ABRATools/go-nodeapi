@@ -1,6 +1,7 @@
 package nginxtemplates
 
 import (
+	"log"
 	"os"
 	"text/template"
 
@@ -20,6 +21,7 @@ type NginxConfig struct {
 func createConfigPath() error {
 	err := os.MkdirAll(nginxConfigPath, os.ModePerm)
 	if err != nil {
+		log.Printf("Error creating directory: %v", err)
 		return err
 	}
 	return nil
@@ -48,13 +50,14 @@ server {
 		return err
 	}
 	templateFile, err := os.Create(centralNginxConfigPath)
-	// if file already exists, return nil
-	if err == nil {
-		return nil
+	if err != nil {
+		log.Printf("Error creating central nginx config: %v", err)
+		return err
 	}
 	defer templateFile.Close()
 	err = tmpl.Execute(templateFile, nil)
 	if err != nil {
+		log.Printf("Error executing template: %v", err)
 		return err
 	}
 	return nil
@@ -63,6 +66,7 @@ server {
 func DeleteNginxConfig(path string) error {
 	err := os.Remove(nginxConfigPath + path + ".conf")
 	if err != nil {
+		log.Printf("Error deleting nginx config: %v", err)
 		return err
 	}
 	return nil
@@ -125,6 +129,7 @@ func GenerateNginxConfig(nginxConfig NginxConfig) error {
 func ReloadNginx() error {
 	err := systemd.ReloadUnit("nginx.service", "replace")
 	if err != nil {
+		log.Fatalf("Failed to reload Nginx: %v, please make sure nginx is installed", err)
 		return err
 	}
 	return nil

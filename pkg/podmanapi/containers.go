@@ -58,14 +58,6 @@ type PodmanContainerStatus struct {
 	State string `json:"state"`
 }
 
-func getMapKeys(m map[uint16][]string) []uint16 {
-	keys := make([]uint16, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
 func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 	fmt.Println("Listing containers...")
 	ctrList, err := containers.List(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
@@ -88,7 +80,7 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 			Names:     ctr.Names,
 			State:     ctr.State,
 			StartedAt: ctr.StartedAt,
-			Ports:     getMapKeys(ctr.ExposedPorts),
+			Ports:     utils.GetMapKeys(ctr.ExposedPorts),
 			Networks:  ctr.Networks,
 			IP:        ip,
 			Exited:    ctr.Exited,

@@ -62,9 +62,16 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusBadRequest, "Image and Name are required")
 				return
 			}
+			// create the container
 			containerID, err := podmanapi.CreateFromImage(podmanContext, imageName, containerName)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
+				return
+			}
+			// start the container
+			_, err = podmanapi.StartPodmanContainer(podmanContext, containerID)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error starting Podman Containers: %v", err)
 				return
 			}
 			c.JSON(http.StatusOK, containerID)

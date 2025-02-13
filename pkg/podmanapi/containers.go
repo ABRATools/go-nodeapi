@@ -46,6 +46,7 @@ type PodmanContainer struct {
 	State     string   `json:"state"`
 	StartedAt int64    `json:"started_at"`
 	Ports     []uint16 `json:"ports"`
+	IP        string   `json:"ip"`
 	Networks  []string `json:"networks"`
 	Exited    bool     `json:"exited"`
 	ExitCode  int32    `json:"exit_code"`
@@ -76,7 +77,10 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		ip, err := GetIPAddress(ctx, ctr.ID)
+		if err != nil {
+			ip = ""
+		}
 		// get keys from ExposedPorts map as Ports list
 		ctrStatusList = append(ctrStatusList, PodmanContainer{
 			ID:        ctr.ID,
@@ -86,6 +90,7 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 			StartedAt: ctr.StartedAt,
 			Ports:     getMapKeys(ctr.ExposedPorts),
 			Networks:  ctr.Networks,
+			IP:        ip,
 			Exited:    ctr.Exited,
 			ExitCode:  ctr.ExitCode,
 			ExitedAt:  ctr.ExitedAt,
@@ -214,27 +219,17 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 	return ctrData.ID, nil
 }
 
-func InspectNetwork(ctx context.Context, containerID string) (map[string]string, error) {
+func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 	inspectData, err := containers.Inspect(ctx, containerID, nil)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 
-	networks := make(map[string]string, 0)
+	// get the IP address of the container
+	// only top-level networks are returned
 
-	if inspectData.NetworkSettings != nil && inspectData.NetworkSettings.Networks != nil {
-		for networkName, networkData := range inspectData.NetworkSettings.Networks {
-			if networkData.IPAddress != "" {
-				fmt.Printf("Container IP Address: %s\n", networkData.IPAddress)
-				networks[networkName] = networkData.IPAddress
-			}
-		}
-	} else if inspectData.NetworkSettings != nil {
-		fmt.Printf("Container IP Address: %s\n", inspectData.NetworkSettings.IPAddress)
-		networks["default"] = inspectData.NetworkSettings.IPAddress
-	} else {
-		fmt.Println("No network settings found for container")
-		return nil, nil
+	if inspectData.NetworkSettings != nil {
+		return "", fmt.Errorf("No network settings found for container")
 	}
-	return networks, nil
+	return inspectData.NetworkSettings.IPAddress, nil
 }

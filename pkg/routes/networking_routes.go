@@ -74,12 +74,12 @@ func RegisterNetworkingRoutes(router *gin.Engine) {
 			}
 			containerID := c.Param("containerID")
 			networkName := c.Param("networkName")
-			err = podmanapi.AttachContainerToNetwork(podmanContext, containerID, networkName)
+			ip, err := podmanapi.AttachContainerToNetwork(podmanContext, containerID, networkName)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error attaching container to network: %v", err)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"status": "Container attached to network successfully"})
+			c.JSON(http.StatusOK, gin.H{"status": "Container attached to network successfully", "ip": ip})
 		})
 	}
 }

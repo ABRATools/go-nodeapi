@@ -52,15 +52,14 @@ func ListNetworks(ctx context.Context) ([]types.Network, error) {
 }
 
 // returns IP address of the container after attaching it to the network
-func AttachContainerToNetwork(ctx context.Context, containerID, networkName string) error {
+func AttachContainerToNetwork(ctx context.Context, containerID, networkName string) (string, error) {
 	err := network.Connect(ctx, containerID, networkName, nil)
 	if err != nil {
-		return fmt.Errorf("error attaching container to network: %v", err)
+		return "", fmt.Errorf("error attaching container to network: %v", err)
 	}
-	netmap, err := InspectNetwork(ctx, containerID)
+	ipAddr, err := GetIPAddress(ctx, containerID)
 	if err != nil {
-		return fmt.Errorf("error inspecting network: %v", err)
+		return "", fmt.Errorf("error inspecting network: %v", err)
 	}
-	log.Printf("Container attached to network(s): %v", netmap)
-	return nil
+	return ipAddr, nil
 }

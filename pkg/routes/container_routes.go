@@ -21,6 +21,10 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusInternalServerError, "Error getting Podman Containers: %v", err)
 				return
 			}
+			if len(podmanContainers) == 0 {
+				c.String(http.StatusNoContent, "No containers found")
+				return
+			}
 			c.JSON(http.StatusOK, podmanContainers)
 		})
 		api.POST("/stop/:id", func(c *gin.Context) {

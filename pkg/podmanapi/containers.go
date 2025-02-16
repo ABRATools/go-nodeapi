@@ -9,6 +9,7 @@ import (
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
+	"github.com/containers/podman/v5/pkg/domain/entities/types"
 	"github.com/containers/podman/v5/pkg/specgen"
 	"github.com/sonarping/go-nodeapi/pkg/utils"
 )
@@ -40,18 +41,21 @@ func InitPodmanConnection() (context.Context, error) {
 }
 
 type PodmanContainer struct {
-	ID        string   `json:"id"`
-	Image     string   `json:"image"`
-	Names     []string `json:"names"`
-	State     string   `json:"state"`
-	StartedAt int64    `json:"started_at"`
-	Ports     []uint16 `json:"ports"`
-	IP        string   `json:"ip"`
-	Networks  []string `json:"networks"`
-	Exited    bool     `json:"exited"`
-	ExitCode  int32    `json:"exit_code"`
-	ExitedAt  int64    `json:"exited_at"`
-	Status    string   `json:"status"`
+	ID            string   `json:"id"`
+	Image         string   `json:"image"`
+	Names         []string `json:"names"`
+	State         string   `json:"state"`
+	StartedAt     int64    `json:"started_at"`
+	Ports         []uint16 `json:"ports"`
+	IP            string   `json:"ip"`
+	Networks      []string `json:"networks"`
+	Exited        bool     `json:"exited"`
+	ExitCode      int32    `json:"exit_code"`
+	ExitedAt      int64    `json:"exited_at"`
+	Status        string   `json:"status"`
+	CPUPercentage float64  `json:"cpu_percentage"`
+	MemoryPercent float64  `json:"memory_percent"`
+	Uptime        int64    `json:"uptime"`
 }
 type PodmanContainerStatus struct {
 	ID    string `json:"id"`
@@ -73,20 +77,32 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 		if err != nil {
 			ip = ""
 		}
+		var stats types.ContainerStatsReport
+		if ctr.State == define.ContainerStateRunning.String() {
+			// get stats for running containers
+			statsChan, err := containers.Stats(ctx, []string{ctr.ID}, &containers.StatsOptions{Stream: utils.GetPtr(false)})
+			if err != nil {
+				fmt.Println(err)
+			}
+			stats = <-statsChan
+		}
 		// get keys from ExposedPorts map as Ports list
 		ctrStatusList = append(ctrStatusList, PodmanContainer{
-			ID:        ctr.ID,
-			Image:     ctr.Image,
-			Names:     ctr.Names,
-			State:     ctr.State,
-			StartedAt: ctr.StartedAt,
-			Ports:     utils.GetMapKeys(ctr.ExposedPorts),
-			Networks:  ctr.Networks,
-			IP:        ip,
-			Exited:    ctr.Exited,
-			ExitCode:  ctr.ExitCode,
-			ExitedAt:  ctr.ExitedAt,
-			Status:    ctr.Status,
+			ID:            ctr.ID,
+			Image:         ctr.Image,
+			Names:         ctr.Names,
+			State:         ctr.State,
+			StartedAt:     ctr.StartedAt,
+			Ports:         utils.GetMapKeys(ctr.ExposedPorts),
+			Networks:      ctr.Networks,
+			IP:            ip,
+			Exited:        ctr.Exited,
+			ExitCode:      ctr.ExitCode,
+			ExitedAt:      ctr.ExitedAt,
+			Status:        ctr.Status,
+			CPUPercentage: stats.Stats[0].CPU,
+			MemoryPercent: stats.Stats[0].MemPerc,
+			Uptime:        int64(stats.Stats[0].UpTime),
 		})
 	}
 
@@ -212,6 +228,18 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 }
 
 func RemovePodmanContainer(ctx context.Context, containerID string) error {
+	inspectData, err := containers.Inspect(ctx, containerID, nil)
+	if err != nil {
+		return err
+	}
+	if inspectData.State.Status == define.ContainerStateRunning.String() {
+		fmt.Println("Stopping container first...")
+		_, err := StopPodmanContainer(ctx, containerID)
+		if err != nil {
+			return err
+		}
+	}
+
 	fmt.Println("Removing container...")
 	rmReports, err := containers.Remove(ctx, containerID, &containers.RemoveOptions{
 		Force:   utils.GetPtr(true),

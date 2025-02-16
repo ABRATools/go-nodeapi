@@ -40,8 +40,7 @@ func generateCentralNginxConfig() error {
 	// Define the central Nginx configuration template.
 	const tmplText = `
 server {
-	listen 9999;
-	server_name localhost;
+	listen 9000;
 
 	include /etc/nginx/snippets/abra/*.conf;
 }

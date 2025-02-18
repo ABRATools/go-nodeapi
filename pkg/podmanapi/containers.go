@@ -41,7 +41,7 @@ func InitPodmanConnection() (context.Context, error) {
 }
 
 type PodmanContainer struct {
-	ID            string   `json:"id"`
+	ID            string   `json:"env_id"`
 	Image         string   `json:"image"`
 	Names         []string `json:"names"`
 	State         string   `json:"state"`

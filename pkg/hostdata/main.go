@@ -41,7 +41,7 @@ func GetHostInfo() (*HostInfo, error) {
 	// Get the total number of logical CPUs.
 	info.CPUCount = runtime.NumCPU()
 
-	cpuPercents, err := cpu.Percent(1*time.Second, false)
+	cpuPercents, err := cpu.Percent(250*time.Millisecond, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CPU usage: %w", err)
 	}

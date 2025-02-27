@@ -12,6 +12,7 @@ import (
 )
 
 type HostInfo struct {
+	Hostname      string  "json:\"hostname\""
 	OSName        string  "json:\"os_name\""
 	OSVersion     string  "json:\"os_version\""
 	CPUCount      int     "json:\"cpu_count\""
@@ -23,6 +24,12 @@ type HostInfo struct {
 
 func GetHostInfo() (*HostInfo, error) {
 	info := new(HostInfo)
+
+	hostname, err := os.Hostname()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hostname: %w", err)
+	}
+	info.Hostname = hostname
 
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {

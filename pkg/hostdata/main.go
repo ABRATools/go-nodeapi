@@ -12,7 +12,7 @@ import (
 )
 
 type HostInfo struct {
-	Hostname      string  "json:\"hostname\""
+	NodeID        string  "json:\"node_id\""
 	OSName        string  "json:\"os_name\""
 	OSVersion     string  "json:\"os_version\""
 	CPUCount      int     "json:\"cpu_count\""
@@ -29,7 +29,7 @@ func GetHostInfo() (*HostInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get hostname: %w", err)
 	}
-	info.Hostname = hostname
+	info.NodeID = hostname
 
 	data, err := os.ReadFile("/etc/os-release")
 	if err != nil {

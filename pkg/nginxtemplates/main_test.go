@@ -1,6 +1,7 @@
 package nginxtemplates
 
 import (
+	"os"
 	"testing"
 )
 
@@ -15,7 +16,11 @@ func TestTemplateCreation(t *testing.T) {
 	}
 	err := GenerateNginxConfig(webConf)
 	if err != nil {
-		t.Errorf("Error creating Nginx config: %v", err)
-		return
+		t.Fatalf("expected nil, got: %v", err)
 	}
+	_, err = os.ReadFile("/etc/nginx/snippets/abra/fatbingus.conf")
+	if err != nil {
+		t.Fatalf("expected nil, got: %v", err)
+	}
+
 }

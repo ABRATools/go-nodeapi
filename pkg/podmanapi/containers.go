@@ -1,3 +1,4 @@
+// podmanapi.go
 package podmanapi
 
 import (
@@ -17,22 +18,36 @@ import (
 var timeout uint = 10
 var Podmanctx context.Context
 
+// Dependency injection variables for testing:
+var (
+	newConnectionFunc = bindings.NewConnection
+	containersInspect = containers.Inspect
+	containersList    = containers.List
+	containersStats   = containers.Stats
+	containersStart   = containers.Start
+	containersStop    = containers.Stop
+	containersWait    = containers.Wait
+	containersCreate  = containers.CreateWithSpec
+	containersRemove  = containers.Remove
+)
+
 type Container struct {
 	ID string
 }
 
 func InitPodmanConnection() (context.Context, error) {
-	sock_dir := os.Getenv("XDG_RUNTIME_DIR")
-	if sock_dir == "" {
-		sock_dir = "/var/run"
+	sockDir := os.Getenv("XDG_RUNTIME_DIR")
+	if sockDir == "" {
+		sockDir = "/var/run"
 	}
-	socket := "unix:" + sock_dir + "/podman/podman.sock"
+	socket := "unix:" + sockDir + "/podman/podman.sock"
 
 	if Podmanctx != nil {
 		return Podmanctx, nil
 	}
 
-	Podmanctx, err := bindings.NewConnection(context.Background(), socket)
+	var err error
+	Podmanctx, err = newConnectionFunc(context.Background(), socket)
 	if err != nil {
 		fmt.Println(err)
 		return nil, err
@@ -57,6 +72,7 @@ type PodmanContainer struct {
 	MemoryPercent float64  `json:"memory_percent"`
 	Uptime        int64    `json:"uptime"`
 }
+
 type PodmanContainerStatus struct {
 	ID    string `json:"id"`
 	State string `json:"state"`
@@ -64,29 +80,27 @@ type PodmanContainerStatus struct {
 
 func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 	fmt.Println("Listing containers...")
-	ctrList, err := containers.List(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
+	ctrList, err := containersList(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
 	if err != nil {
 		return nil, err
 	}
 	var ctrStatusList []PodmanContainer
 	for _, ctr := range ctrList {
-		if err != nil {
-			return nil, err
-		}
+		// Retrieve IP
 		ip, err := GetIPAddress(ctx, ctr.ID)
 		if err != nil {
 			ip = ""
 		}
 		var stats types.ContainerStatsReport
 		if ctr.State == define.ContainerStateRunning.String() {
-			// get stats for running containers
-			statsChan, err := containers.Stats(ctx, []string{ctr.ID}, &containers.StatsOptions{Stream: utils.GetPtr(false)})
+			// Get stats for running containers
+			statsChan, err := containersStats(ctx, []string{ctr.ID}, &containers.StatsOptions{Stream: utils.GetPtr(false)})
 			if err != nil {
 				fmt.Println(err)
+			} else {
+				stats = <-statsChan
 			}
-			stats = <-statsChan
 		}
-		// get keys from ExposedPorts map as Ports list
 		ctrStatusList = append(ctrStatusList, PodmanContainer{
 			ID:            ctr.ID,
 			Image:         ctr.Image,
@@ -112,16 +126,16 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
 	fmt.Println("Starting container...")
 
-	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
-	if testContainerErr != nil {
-		return PodmanContainerStatus{}, testContainerErr
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return PodmanContainerStatus{}, err
 	}
 
 	if contData.State.Status == define.ContainerStateRunning.String() {
 		return PodmanContainerStatus{}, fmt.Errorf("Container is already running")
 	}
 
-	err := containers.Start(ctx, containerID, &containers.StartOptions{})
+	err = containersStart(ctx, containerID, &containers.StartOptions{})
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}
@@ -130,7 +144,7 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 	startContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	go func() {
-		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+		_, err = containersWait(ctx, containerID, &containers.WaitOptions{
 			Condition: []define.ContainerStatus{define.ContainerStateRunning},
 		})
 		if err != nil {
@@ -141,12 +155,11 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 
 	select {
 	case <-ret:
-		break
 	case <-startContext.Done():
 		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to start")
 	}
 
-	ctrData, err := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+	ctrData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}
@@ -160,16 +173,16 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
 	fmt.Println("Stopping container...")
 
-	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
-	if testContainerErr != nil {
-		return PodmanContainerStatus{}, testContainerErr
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return PodmanContainerStatus{}, err
 	}
 
 	if contData.State.Status == define.ContainerStateStopped.String() {
 		return PodmanContainerStatus{}, fmt.Errorf("Container is already stopped")
 	}
 
-	err := containers.Stop(ctx, containerID, &containers.StopOptions{
+	err = containersStop(ctx, containerID, &containers.StopOptions{
 		Ignore:  utils.GetPtr(false),
 		Timeout: &timeout,
 	})
@@ -181,7 +194,7 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	stopContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	go func() {
-		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+		_, err = containersWait(ctx, containerID, &containers.WaitOptions{
 			Condition: []define.ContainerStatus{define.ContainerStateStopped},
 		})
 		if err != nil {
@@ -192,16 +205,11 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 
 	select {
 	case <-ret:
-		break
 	case <-stopContext.Done():
 		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to stop")
 	}
 
-	if err != nil {
-		return PodmanContainerStatus{}, err
-	}
-
-	ctrData, err := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+	ctrData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
 	if err != nil {
 		return PodmanContainerStatus{}, err
 	}
@@ -217,9 +225,8 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 	spec := new(specgen.SpecGenerator)
 	spec.Name = containerName
 	spec.Image = imageName
-	// basic container settings
 
-	ctrData, err := containers.CreateWithSpec(ctx, spec, nil)
+	ctrData, err := containersCreate(ctx, spec, nil)
 	if err != nil {
 		return "", err
 	}
@@ -228,7 +235,7 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 }
 
 func RemovePodmanContainer(ctx context.Context, containerID string) error {
-	inspectData, err := containers.Inspect(ctx, containerID, nil)
+	inspectData, err := containersInspect(ctx, containerID, nil)
 	if err != nil {
 		return err
 	}
@@ -241,7 +248,7 @@ func RemovePodmanContainer(ctx context.Context, containerID string) error {
 	}
 
 	fmt.Println("Removing container...")
-	rmReports, err := containers.Remove(ctx, containerID, &containers.RemoveOptions{
+	rmReports, err := containersRemove(ctx, containerID, &containers.RemoveOptions{
 		Force:   utils.GetPtr(true),
 		Timeout: utils.GetPtr(uint(30)),
 	})
@@ -250,23 +257,290 @@ func RemovePodmanContainer(ctx context.Context, containerID string) error {
 			return report.Err
 		}
 	}
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func GetIPAddress(ctx context.Context, containerID string) (string, error) {
-	inspectData, err := containers.Inspect(ctx, containerID, nil)
+	inspectData, err := containersInspect(ctx, containerID, nil)
 	if err != nil {
 		return "", err
 	}
-
-	// get the IP address of the container
-	// only top-level networks are returned
 
 	if inspectData.NetworkSettings == nil {
 		return "", fmt.Errorf("No network settings found for container")
 	}
 	return inspectData.NetworkSettings.IPAddress, nil
 }
+
+// package podmanapi
+
+// import (
+// 	"context"
+// 	"fmt"
+// 	"os"
+// 	"time"
+
+// 	"github.com/containers/podman/v5/libpod/define"
+// 	"github.com/containers/podman/v5/pkg/bindings"
+// 	"github.com/containers/podman/v5/pkg/bindings/containers"
+// 	"github.com/containers/podman/v5/pkg/domain/entities/types"
+// 	"github.com/containers/podman/v5/pkg/specgen"
+// 	"github.com/sonarping/go-nodeapi/pkg/utils"
+// )
+
+// var timeout uint = 10
+// var Podmanctx context.Context
+
+// type Container struct {
+// 	ID string
+// }
+
+// func InitPodmanConnection() (context.Context, error) {
+// 	sock_dir := os.Getenv("XDG_RUNTIME_DIR")
+// 	if sock_dir == "" {
+// 		sock_dir = "/var/run"
+// 	}
+// 	socket := "unix:" + sock_dir + "/podman/podman.sock"
+
+// 	if Podmanctx != nil {
+// 		return Podmanctx, nil
+// 	}
+
+// 	Podmanctx, err := bindings.NewConnection(context.Background(), socket)
+// 	if err != nil {
+// 		fmt.Println(err)
+// 		return nil, err
+// 	}
+// 	return Podmanctx, nil
+// }
+
+// type PodmanContainer struct {
+// 	ID            string   `json:"env_id"`
+// 	Image         string   `json:"image"`
+// 	Names         []string `json:"names"`
+// 	State         string   `json:"state"`
+// 	StartedAt     int64    `json:"started_at"`
+// 	Ports         []uint16 `json:"ports"`
+// 	IP            string   `json:"ip"`
+// 	Networks      []string `json:"networks"`
+// 	Exited        bool     `json:"exited"`
+// 	ExitCode      int32    `json:"exit_code"`
+// 	ExitedAt      int64    `json:"exited_at"`
+// 	Status        string   `json:"status"`
+// 	CPUPercentage float64  `json:"cpu_percentage"`
+// 	MemoryPercent float64  `json:"memory_percent"`
+// 	Uptime        int64    `json:"uptime"`
+// }
+// type PodmanContainerStatus struct {
+// 	ID    string `json:"id"`
+// 	State string `json:"state"`
+// }
+
+// func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
+// 	fmt.Println("Listing containers...")
+// 	ctrList, err := containers.List(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	var ctrStatusList []PodmanContainer
+// 	for _, ctr := range ctrList {
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		ip, err := GetIPAddress(ctx, ctr.ID)
+// 		if err != nil {
+// 			ip = ""
+// 		}
+// 		var stats types.ContainerStatsReport
+// 		if ctr.State == define.ContainerStateRunning.String() {
+// 			// get stats for running containers
+// 			statsChan, err := containers.Stats(ctx, []string{ctr.ID}, &containers.StatsOptions{Stream: utils.GetPtr(false)})
+// 			if err != nil {
+// 				fmt.Println(err)
+// 			}
+// 			stats = <-statsChan
+// 		}
+// 		// get keys from ExposedPorts map as Ports list
+// 		ctrStatusList = append(ctrStatusList, PodmanContainer{
+// 			ID:            ctr.ID,
+// 			Image:         ctr.Image,
+// 			Names:         ctr.Names,
+// 			State:         ctr.State,
+// 			StartedAt:     ctr.StartedAt,
+// 			Ports:         utils.GetMapKeys(ctr.ExposedPorts),
+// 			Networks:      ctr.Networks,
+// 			IP:            ip,
+// 			Exited:        ctr.Exited,
+// 			ExitCode:      ctr.ExitCode,
+// 			ExitedAt:      ctr.ExitedAt,
+// 			Status:        ctr.Status,
+// 			CPUPercentage: stats.Stats[0].CPU,
+// 			MemoryPercent: stats.Stats[0].MemPerc,
+// 			Uptime:        int64(stats.Stats[0].UpTime),
+// 		})
+// 	}
+
+// 	return ctrStatusList, nil
+// }
+
+// func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
+// 	fmt.Println("Starting container...")
+
+// 	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+// 	if testContainerErr != nil {
+// 		return PodmanContainerStatus{}, testContainerErr
+// 	}
+
+// 	if contData.State.Status == define.ContainerStateRunning.String() {
+// 		return PodmanContainerStatus{}, fmt.Errorf("Container is already running")
+// 	}
+
+// 	err := containers.Start(ctx, containerID, &containers.StartOptions{})
+// 	if err != nil {
+// 		return PodmanContainerStatus{}, err
+// 	}
+
+// 	ret := make(chan bool)
+// 	startContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 	defer cancel()
+// 	go func() {
+// 		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+// 			Condition: []define.ContainerStatus{define.ContainerStateRunning},
+// 		})
+// 		if err != nil {
+// 			fmt.Println(err)
+// 		}
+// 		ret <- true
+// 	}()
+
+// 	select {
+// 	case <-ret:
+// 		break
+// 	case <-startContext.Done():
+// 		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to start")
+// 	}
+
+// 	ctrData, err := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+// 	if err != nil {
+// 		return PodmanContainerStatus{}, err
+// 	}
+
+// 	return PodmanContainerStatus{
+// 		ID:    containerID,
+// 		State: ctrData.State.Status,
+// 	}, nil
+// }
+
+// func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContainerStatus, error) {
+// 	fmt.Println("Stopping container...")
+
+// 	contData, testContainerErr := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+// 	if testContainerErr != nil {
+// 		return PodmanContainerStatus{}, testContainerErr
+// 	}
+
+// 	if contData.State.Status == define.ContainerStateStopped.String() {
+// 		return PodmanContainerStatus{}, fmt.Errorf("Container is already stopped")
+// 	}
+
+// 	err := containers.Stop(ctx, containerID, &containers.StopOptions{
+// 		Ignore:  utils.GetPtr(false),
+// 		Timeout: &timeout,
+// 	})
+// 	if err != nil {
+// 		return PodmanContainerStatus{}, err
+// 	}
+
+// 	ret := make(chan bool)
+// 	stopContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 	defer cancel()
+// 	go func() {
+// 		_, err = containers.Wait(ctx, containerID, &containers.WaitOptions{
+// 			Condition: []define.ContainerStatus{define.ContainerStateStopped},
+// 		})
+// 		if err != nil {
+// 			fmt.Println(err)
+// 		}
+// 		ret <- true
+// 	}()
+
+// 	select {
+// 	case <-ret:
+// 		break
+// 	case <-stopContext.Done():
+// 		return PodmanContainerStatus{}, fmt.Errorf("Timeout waiting for container to stop")
+// 	}
+
+// 	if err != nil {
+// 		return PodmanContainerStatus{}, err
+// 	}
+
+// 	ctrData, err := containers.Inspect(ctx, containerID, &containers.InspectOptions{})
+// 	if err != nil {
+// 		return PodmanContainerStatus{}, err
+// 	}
+
+// 	return PodmanContainerStatus{
+// 		ID:    containerID,
+// 		State: ctrData.State.Status,
+// 	}, nil
+// }
+
+// func CreateFromImage(ctx context.Context, imageName string, containerName string) (string, error) {
+// 	fmt.Println("Creating container...")
+// 	spec := new(specgen.SpecGenerator)
+// 	spec.Name = containerName
+// 	spec.Image = imageName
+// 	// basic container settings
+
+// 	ctrData, err := containers.CreateWithSpec(ctx, spec, nil)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	return ctrData.ID, nil
+// }
+
+// func RemovePodmanContainer(ctx context.Context, containerID string) error {
+// 	inspectData, err := containers.Inspect(ctx, containerID, nil)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if inspectData.State.Status == define.ContainerStateRunning.String() {
+// 		fmt.Println("Stopping container first...")
+// 		_, err := StopPodmanContainer(ctx, containerID)
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	fmt.Println("Removing container...")
+// 	rmReports, err := containers.Remove(ctx, containerID, &containers.RemoveOptions{
+// 		Force:   utils.GetPtr(true),
+// 		Timeout: utils.GetPtr(uint(30)),
+// 	})
+// 	for _, report := range rmReports {
+// 		if report.Err != nil {
+// 			return report.Err
+// 		}
+// 	}
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
+
+// func GetIPAddress(ctx context.Context, containerID string) (string, error) {
+// 	inspectData, err := containers.Inspect(ctx, containerID, nil)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	// get the IP address of the container
+// 	// only top-level networks are returned
+
+// 	if inspectData.NetworkSettings == nil {
+// 		return "", fmt.Errorf("No network settings found for container")
+// 	}
+// 	return inspectData.NetworkSettings.IPAddress, nil
+// }

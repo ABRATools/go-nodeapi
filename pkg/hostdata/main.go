@@ -2,6 +2,8 @@ package hostdata
 
 import (
 	"fmt"
+	"log"
+	"net"
 	"os"
 	"runtime"
 	"strings"
@@ -21,6 +23,7 @@ type HostInfo struct {
 	MemPercent    float64 `json:"mem_percent"`
 	TotalMemory   uint64  `json:"total_memory"`
 	NumContainers int     `json:"num_containers"`
+	IPAddress     string  `json:"ip_address"`
 }
 
 // Dependency injection variables for easier testing.
@@ -69,7 +72,24 @@ func GetHostInfo() (*HostInfo, error) {
 	info.TotalMemory = vmStat.Total
 	info.MemPercent = vmStat.UsedPercent
 
+	info.IPAddress = GetOutboundIP().String()
+
 	return info, nil
+}
+
+// GetOutboundIP returns the preferred outbound IP of this machine.
+func GetOutboundIP() net.IP {
+	// Connect to an external address. It doesn't have to be reachable,
+	// since no packets are actually sent.
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	// Retrieve the local address from the connection.
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	return localAddr.IP
 }
 
 // package hostdata

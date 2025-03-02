@@ -100,7 +100,18 @@ func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
 			} else {
 				stats = <-statsChan
 			}
+		} else {
+			stats = types.ContainerStatsReport{
+				Stats: []define.ContainerStats{
+					{
+						CPU:     0,
+						MemPerc: 0,
+						UpTime:  0,
+					},
+				},
+			}
 		}
+
 		ctrStatusList = append(ctrStatusList, PodmanContainer{
 			ID:            ctr.ID,
 			Image:         ctr.Image,

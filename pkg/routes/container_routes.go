@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"net"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +52,32 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusInternalServerError, "Error starting Podman Containers: %v", err)
 				return
 			}
+			container_ip, err := podmanapi.GetIPAddress(podmanContext, id)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error getting IP Address of Podman Containers: %v", err)
+				return
+			}
+			container_name, err := podmanapi.GetContainerName(podmanContext, id)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error getting Container Name of Podman Containers: %v", err)
+				return
+			}
+			// recreate nginx config
+			// use default portmap for now
+			webConf := nginxtemplates.NginxConfig{
+				Path: container_name,
+				IP:   container_ip,
+				PortMap: map[uint]string{
+					5801: "novnc",
+					7681: "ttyd",
+				},
+			}
+			err = nginxtemplates.GenerateNginxConfig(webConf)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error generating Nginx Config: %v", err)
+				return
+			}
+
 			c.JSON(http.StatusOK, status)
 		})
 		api.POST("/remove/:id", func(c *gin.Context) {
@@ -77,6 +104,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			// expects data in form-data in the format:
 			// image: <image name>
 			// name: <container name>
+			// ip: <static container ip> (optional)
 			podmanContext, err := podmanapi.InitPodmanConnection()
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
@@ -87,8 +115,24 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusBadRequest, "Image and Name are required")
 				return
 			}
+			exists, err := podmanapi.GetContainerName(podmanContext, containerName)
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error checking Podman Containers: %v", err)
+				return
+			}
+			if exists != "" {
+				c.String(http.StatusBadRequest, "Container with name %s already exists", containerName)
+				return
+			}
+			ip := net.IP{}
+			if c.PostForm("ip") != "" {
+				// create a static IP
+				ip = net.ParseIP(c.PostForm("ip"))
+			} else {
+				ip = net.IP{}
+			}
 			// create the container
-			containerID, err := podmanapi.CreateFromImage(podmanContext, imageName, containerName)
+			containerID, err := podmanapi.CreateFromImage(podmanContext, imageName, containerName, podmanapi.WithStaticIP(ip))
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
 				return
@@ -100,7 +144,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				return
 			}
 			// get the container IP
-			ip, err := podmanapi.GetIPAddress(podmanContext, containerID)
+			container_ip, err := podmanapi.GetIPAddress(podmanContext, containerID)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error getting IP Address of Podman Containers: %v", err)
 				return
@@ -109,7 +153,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			// use default portmap for now
 			webConf := nginxtemplates.NginxConfig{
 				Path: containerName,
-				IP:   ip,
+				IP:   container_ip,
 				PortMap: map[uint]string{
 					5801: "novnc",
 					7681: "ttyd",

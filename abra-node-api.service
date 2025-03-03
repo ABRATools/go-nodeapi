@@ -1,0 +1,19 @@
+# /etc/systemd/system/abra-node-api.service
+[Unit]
+Description=Abra Node API
+After=network.target
+
+[Service]
+Type=simple
+Environment=DAEMON_ARGS=
+WorkingDirectory=/etc/abra/node-api
+ExecStart=node-api $DAEMON_ARGS
+Restart=always
+RestartSec=1
+User=root
+Group=root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+

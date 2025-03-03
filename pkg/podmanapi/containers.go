@@ -4,9 +4,11 @@ package podmanapi
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
+	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/podman/v5/libpod/define"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
@@ -231,11 +233,35 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	}, nil
 }
 
-func CreateFromImage(ctx context.Context, imageName string, containerName string) (string, error) {
+type Option func(*Config)
+
+type Config struct {
+	StaticIP net.IP
+}
+
+func WithStaticIP(ip net.IP) Option {
+	return func(c *Config) {
+		c.StaticIP = ip
+	}
+}
+
+func CreateFromImage(ctx context.Context, imageName string, containerName string, create_opts ...Option) (string, error) {
 	fmt.Println("Creating container...")
+	config := &Config{}
+	for _, opt := range create_opts {
+		opt(config)
+	}
 	spec := new(specgen.SpecGenerator)
 	spec.Name = containerName
 	spec.Image = imageName
+
+	if config.StaticIP != nil {
+		spec.Networks = map[string]nettypes.PerNetworkOptions{
+			"podman": {
+				StaticIPs: []net.IP{config.StaticIP},
+			},
+		}
+	}
 
 	ctrData, err := containersCreate(ctx, spec, nil)
 	if err != nil {
@@ -269,6 +295,14 @@ func RemovePodmanContainer(ctx context.Context, containerID string) error {
 		}
 	}
 	return err
+}
+
+func GetContainerName(ctx context.Context, containerID string) (string, error) {
+	ctr, err := containersInspect(ctx, containerID, nil)
+	if err != nil {
+		return "", nil
+	}
+	return ctr.Name, nil
 }
 
 func GetIPAddress(ctx context.Context, containerID string) (string, error) {

@@ -144,6 +144,9 @@ func StartPodmanContainer(ctx context.Context, containerID string) (PodmanContai
 		return PodmanContainerStatus{}, err
 	}
 
+	//fmt.Println(contData)
+	fmt.Println(contData.State.Status)
+
 	if contData.State.Status == define.ContainerStateRunning.String() {
 		return PodmanContainerStatus{}, fmt.Errorf("Container is already running")
 	}

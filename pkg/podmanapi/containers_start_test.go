@@ -32,6 +32,7 @@ func TestStartPodmanContainer_AlreadyRunning(t *testing.T) {
 		thing := new(define.InspectContainerData)
 		thing.ID = containerID
 		newstate := new(define.InspectContainerState)
+		newstate.Status = "running"
 		newstate.Running = true
 		thing.State = newstate
 		return thing, nil
@@ -55,6 +56,7 @@ func TestStartPodmanContainer_Success(t *testing.T) {
 			thing := new(define.InspectContainerData)
 			thing.ID = containerID
 			newstate := new(define.InspectContainerState)
+			newstate.Status = "exited"
 			newstate.Running = false
 			thing.State = newstate
 			return thing, nil
@@ -63,6 +65,7 @@ func TestStartPodmanContainer_Success(t *testing.T) {
 		thing := new(define.InspectContainerData)
 		thing.ID = containerID
 		newstate := new(define.InspectContainerState)
+		newstate.Status = "running"
 		newstate.Running = true
 		thing.State = newstate
 		return thing, nil

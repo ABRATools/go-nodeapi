@@ -123,7 +123,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			imageName := req.Image
 			containerName := req.Name
 			if imageName == "" || containerName == "" {
-				c.JSON(http.StatusBadRequest, gin.H{"message": "Image and Name are required"})
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Image and Name are required for new environments"})
 				return
 			}
 			exists, err := podmanapi.GetContainerName(podmanContext, containerName)
@@ -139,7 +139,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			ip := net.IP{}
 			if req.IP != "" {
 				// create a static IP
-				ip = net.ParseIP(c.PostForm("ip"))
+				ip = net.ParseIP(c.PostForm(req.IP))
 				// create the container
 				containerID, err = podmanapi.CreateFromImageWithStaticIP(podmanContext, imageName, containerName, ip)
 				if err != nil {

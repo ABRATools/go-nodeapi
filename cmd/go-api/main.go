@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-
+	// gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	gin.DefaultWriter = os.Stdout
 	// set middleware for all groups

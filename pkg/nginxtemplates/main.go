@@ -71,6 +71,10 @@ server {
 // DeleteNginxConfig removes an Nginx config file based on the provided name.
 func DeleteNginxConfig(name string) error {
 	configPath := filepath.Join(nginxConfigDir, name+".conf")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		fmt.Printf("nginx config %q does not exist\n", configPath)
+		return nil
+	}
 	if err := os.Remove(configPath); err != nil {
 		return fmt.Errorf("deleting nginx config %q: %w", configPath, err)
 	}

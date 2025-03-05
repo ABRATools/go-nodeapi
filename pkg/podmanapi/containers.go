@@ -81,7 +81,7 @@ type PodmanContainerStatus struct {
 }
 
 func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {
-	fmt.Println("Listing containers...")
+	// fmt.Println("Listing containers...")
 	ctrList, err := containersList(ctx, &containers.ListOptions{All: utils.GetPtr(true)})
 	if err != nil {
 		return nil, err

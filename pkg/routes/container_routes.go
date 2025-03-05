@@ -139,7 +139,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			ip := net.IP{}
 			if req.IP != "" {
 				// create a static IP
-				ip = net.ParseIP(c.PostForm(req.IP))
+				ip = net.ParseIP(req.IP)
 				// create the container
 				containerID, err = podmanapi.CreateFromImageWithStaticIP(podmanContext, imageName, containerName, ip)
 				if err != nil {

@@ -135,18 +135,24 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				c.String(http.StatusBadRequest, "Container with name %s already exists", containerName)
 				return
 			}
+			containerID := ""
 			ip := net.IP{}
 			if req.IP != "" {
 				// create a static IP
 				ip = net.ParseIP(c.PostForm("ip"))
+				// create the container
+				containerID, err = podmanapi.CreateFromImageWithStaticIP(podmanContext, imageName, containerName, ip)
+				if err != nil {
+					c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
+					return
+				}
 			} else {
-				ip = net.IP{}
-			}
-			// create the container
-			containerID, err := podmanapi.CreateFromImage(podmanContext, imageName, containerName, podmanapi.WithStaticIP(ip))
-			if err != nil {
-				c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
-				return
+				// create the container
+				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName)
+				if err != nil {
+					c.String(http.StatusInternalServerError, "Error creating Podman Containers: %v", err)
+					return
+				}
 			}
 			// start the container
 			_, err = podmanapi.StartPodmanContainer(podmanContext, containerID)

@@ -236,34 +236,33 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	}, nil
 }
 
-type Option func(*Config)
-
-type Config struct {
-	StaticIP net.IP
-}
-
-func WithStaticIP(ip net.IP) Option {
-	return func(c *Config) {
-		c.StaticIP = ip
-	}
-}
-
-func CreateFromImage(ctx context.Context, imageName string, containerName string, create_opts ...Option) (string, error) {
+func CreateFromImage(ctx context.Context, imageName string, containerName string) (string, error) {
 	fmt.Println("Creating container...")
-	config := &Config{}
-	for _, opt := range create_opts {
-		opt(config)
-	}
 	spec := new(specgen.SpecGenerator)
 	spec.Name = containerName
 	spec.Image = imageName
 
-	if config.StaticIP != nil {
+	ctrData, err := containersCreate(ctx, spec, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return ctrData.ID, nil
+}
+
+func CreateFromImageWithStaticIP(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
+	fmt.Println("Creating container with static IP...")
+	spec := new(specgen.SpecGenerator)
+	spec.Name = containerName
+	spec.Image = imageName
+	if static_ip != nil {
 		spec.Networks = map[string]nettypes.PerNetworkOptions{
 			"podman": {
-				StaticIPs: []net.IP{config.StaticIP},
+				StaticIPs: []net.IP{static_ip},
 			},
 		}
+	} else {
+		return "", fmt.Errorf("Static IP cannot be nil")
 	}
 
 	ctrData, err := containersCreate(ctx, spec, nil)

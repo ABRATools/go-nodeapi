@@ -100,17 +100,28 @@ func RegisterContainerRoutes(router *gin.Engine) {
 
 			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})
 		})
+
+		type CreateContainerRequest struct {
+			Image string `json:"image" binding:"required"`
+			Name  string `json:"name" binding:"required"`
+			IP    string `json:"ip"`
+		}
+		// expects data in form-data in the format:
+		// image: <image name>
+		// name: <container name>
+		// ip: <static container ip> (optional)
 		api.POST("/create", func(c *gin.Context) {
-			// expects data in form-data in the format:
-			// image: <image name>
-			// name: <container name>
-			// ip: <static container ip> (optional)
+			var req CreateContainerRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.String(http.StatusBadRequest, "Invalid request: %v", err)
+				return
+			}
 			podmanContext, err := podmanapi.InitPodmanConnection()
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
 			}
-			imageName := c.PostForm("image")
-			containerName := c.PostForm("name")
+			imageName := req.Image
+			containerName := req.Name
 			if imageName == "" || containerName == "" {
 				c.String(http.StatusBadRequest, "Image and Name are required")
 				return
@@ -125,7 +136,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				return
 			}
 			ip := net.IP{}
-			if c.PostForm("ip") != "" {
+			if req.IP != "" {
 				// create a static IP
 				ip = net.ParseIP(c.PostForm("ip"))
 			} else {

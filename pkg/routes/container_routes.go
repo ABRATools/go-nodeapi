@@ -3,6 +3,7 @@ package routes
 import (
 	"net"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sonarping/go-nodeapi/pkg/nginxtemplates"
@@ -96,6 +97,16 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error removing Nginx Config: %v", err)
 				return
+			}
+
+			// remove the /var/log/abra/<container_name> directory if it exists
+			logDir := "/var/log/abra/" + id
+			if _, err := os.Stat(logDir); !os.IsNotExist(err) {
+				err = os.RemoveAll(logDir)
+				if err != nil {
+					c.String(http.StatusInternalServerError, "Error removing log directory: %v", err)
+					return
+				}
 			}
 
 			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})

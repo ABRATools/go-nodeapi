@@ -59,7 +59,7 @@ func GetHostInfo() (*HostInfo, error) {
 
 	info.CPUCount = runtime.NumCPU()
 
-	cpuPercents, err := cpuPercentFunc(250*time.Millisecond, false)
+	cpuPercents, err := cpuPercentFunc(100*time.Millisecond, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CPU usage: %w", err)
 	}

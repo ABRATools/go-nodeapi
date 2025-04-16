@@ -40,6 +40,9 @@ func main() {
 	// for listing, creating, removing networks and adding/removing containers from networks
 	routes.RegisterNetworkingRoutes(router)
 
+	// for listing, starting, stopping, removing ebpf services
+	routes.RegisterEBPFRoutes(router)
+
 	server := &http.Server{
 		Addr:         ":8888",
 		Handler:      router,

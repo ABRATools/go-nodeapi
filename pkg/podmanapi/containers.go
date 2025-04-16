@@ -2,19 +2,23 @@
 package podmanapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	nettypes "github.com/containers/common/libnetwork/types"
 	"github.com/containers/podman/v5/libpod/define"
+	"github.com/containers/podman/v5/pkg/api/handlers"
 	"github.com/containers/podman/v5/pkg/bindings"
 	"github.com/containers/podman/v5/pkg/bindings/containers"
 	"github.com/containers/podman/v5/pkg/domain/entities/types"
@@ -84,6 +88,168 @@ type PodmanContainer struct {
 type PodmanContainerStatus struct {
 	ID    string `json:"id"`
 	State string `json:"state"`
+}
+type EBPFServiceStatus struct {
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
+}
+
+func ContainerExec(ctx context.Context, containerID string, command []string) (string, error) {
+	fmt.Println("Executing command in container...")
+
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Println(contData.State.Status)
+
+	if contData.State.Status != define.ContainerStateRunning.String() {
+		return "", fmt.Errorf("Container is not running")
+	}
+
+	execConfig := new(handlers.ExecCreateConfig)
+	execConfig.Cmd = command
+	execConfig.AttachStdout = true
+	execConfig.AttachStderr = true
+	execConfig.Tty = false
+	execID, err := containers.ExecCreate(ctx, containerID, execConfig)
+	if err != nil {
+		return "", fmt.Errorf("creating exec session: %w", err)
+	}
+	var stdout, stderr bytes.Buffer
+	var w_out io.Writer = &stdout
+	var w_err io.Writer = &stderr
+	startOpts := new(containers.ExecStartAndAttachOptions)
+	startOpts.AttachOutput = utils.GetPtr(true)
+	startOpts.AttachError = utils.GetPtr(true)
+	startOpts.AttachInput = utils.GetPtr(false)
+	startOpts.OutputStream = utils.GetPtr(w_out)
+	startOpts.ErrorStream = utils.GetPtr(w_err)
+	if err := containers.ExecStartAndAttach(ctx, execID, startOpts); err != nil {
+		return "", fmt.Errorf("starting exec session: %w", err)
+	}
+
+	inspectOptions := new(containers.ExecInspectOptions)
+	inspect, err := containers.ExecInspect(ctx, execID, inspectOptions)
+	if err != nil {
+		return "", fmt.Errorf("inspecting exec session: %w", err)
+	}
+	if inspect.ExitCode != 0 {
+		return "", fmt.Errorf("exec failed (exit %d): %s", inspect.ExitCode, strings.TrimSpace(stderr.String()))
+	}
+
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+func GetEBPFSystemdUnits(ctx context.Context, containerID string) ([]EBPFServiceStatus, error) {
+	fmt.Println("Getting systemd units...")
+
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(contData.State.Status)
+
+	if contData.State.Status != define.ContainerStateRunning.String() {
+		return nil, fmt.Errorf("Container is not running")
+	}
+
+	command := []string{"find", "/etc/systemd/system", "-maxdepth", "1", "-type", "f", "-name", "ebpf_*", "-printf", "'%f\n'"}
+	output, err := ContainerExec(ctx, containerID, command)
+	if err != nil {
+		return nil, fmt.Errorf("executing command in container: %w", err)
+	}
+
+	lines := strings.Split(output, "\n")
+	var files []string
+	for _, l := range lines {
+		if l != "" {
+			files = append(files, l)
+		}
+	}
+	EBPFServices := make([]EBPFServiceStatus, len(files))
+	for i, f := range files {
+		command = []string{"systemctl", "is-active", f}
+		output, err = ContainerExec(ctx, containerID, command)
+		if err != nil {
+			return nil, fmt.Errorf("executing command in container: %w", err)
+		}
+		fmt.Println(output)
+		status := output == "active"
+		EBPFServices[i] = EBPFServiceStatus{
+			Name:   f,
+			Active: status,
+		}
+	}
+	return EBPFServices, nil
+}
+
+func StartEBPFService(ctx context.Context, containerID string, ebpfService string) (bool, error) {
+	fmt.Println("Getting systemd units...")
+
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println(contData.State.Status)
+
+	if contData.State.Status != define.ContainerStateRunning.String() {
+		return false, fmt.Errorf("Container is not running")
+	}
+
+	command := []string{"systemctl", "start", ebpfService}
+	_, err = ContainerExec(ctx, containerID, command)
+	if err != nil {
+		return false, fmt.Errorf("executing command in container: %w", err)
+	}
+
+	// Check if the service is running
+	command = []string{"systemctl", "is-active", ebpfService}
+	output, err := ContainerExec(ctx, containerID, command)
+	if err != nil {
+		return false, fmt.Errorf("executing command in container: %w", err)
+	}
+	if output == "active" {
+		return true, nil
+	} else {
+		return false, fmt.Errorf("service is not running")
+	}
+}
+
+func StopEBPFService(ctx context.Context, containerID string, ebpfService string) (bool, error) {
+	fmt.Println("Stopping systemd units...")
+
+	contData, err := containersInspect(ctx, containerID, &containers.InspectOptions{})
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println(contData.State.Status)
+
+	if contData.State.Status != define.ContainerStateRunning.String() {
+		return false, fmt.Errorf("Container is not running")
+	}
+
+	command := []string{"systemctl", "stop", ebpfService}
+	_, err = ContainerExec(ctx, containerID, command)
+	if err != nil {
+		return false, fmt.Errorf("executing command in container: %w", err)
+	}
+
+	// Check if the service is stopped
+	command = []string{"systemctl", "is-active", ebpfService}
+	output, err := ContainerExec(ctx, containerID, command)
+	if err != nil {
+		return false, fmt.Errorf("executing command in container: %w", err)
+	}
+	if output == "inactive" {
+		return true, nil
+	} else {
+		return false, fmt.Errorf("service is not stopped")
+	}
 }
 
 func ListPodmanContainers(ctx context.Context) ([]PodmanContainer, error) {

@@ -183,5 +183,83 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			}
 			c.JSON(http.StatusOK, containerID)
 		})
+
+		// expects data in form-data in the format:
+		// image: <image name>
+		// name: <container name>
+		// ip: <static container ip> (optional)
+		api.POST("/create-ebpf", func(c *gin.Context) {
+			var req CreateContainerRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			}
+			podmanContext, err := podmanapi.InitPodmanConnection()
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			imageName := req.Image
+			containerName := req.Name
+			if imageName == "" || containerName == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Image and Name are required for new environments"})
+				return
+			}
+			exists, err := podmanapi.GetContainerName(podmanContext, containerName)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			if exists != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"message": "Container with name already exists"})
+				return
+			}
+			containerID := ""
+			ip := net.IP{}
+			if req.IP != "" {
+				// create a static IP
+				ip = net.ParseIP(req.IP)
+				// create the container
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, ip)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+					return
+				}
+			} else {
+				// create the container
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, nil)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+					return
+				}
+			}
+			// start the container
+			_, err = podmanapi.StartPodmanContainer(podmanContext, containerID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			// get the container IP
+			container_ip, err := podmanapi.GetIPAddress(podmanContext, containerID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			// create nginx config
+			// use default portmap for now
+			webConf := nginxtemplates.NginxConfig{
+				Path: containerName,
+				IP:   container_ip,
+				PortMap: map[uint]string{
+					5801: "novnc",
+					7681: "ttyd",
+				},
+			}
+			err = nginxtemplates.GenerateNginxConfig(webConf)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, containerID)
+		})
 	}
 }

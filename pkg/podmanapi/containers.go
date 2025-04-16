@@ -455,7 +455,7 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 			Source:      jobLogDir,
 			Destination: "/var/log/ebpf",
 			Type:        "bind",
-			Options:     []string{"ro"},
+			Options:     []string{"rw"},
 		},
 		{
 			Source:      "/sys/fs/cgroup",

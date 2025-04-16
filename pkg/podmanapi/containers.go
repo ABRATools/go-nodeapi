@@ -391,10 +391,12 @@ func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 // 	return ctrData.ID, nil
 // }
 
+// imageName string, containerName string, static_ip net.IP
+
 func CreateEBPFContainer(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
 	image := "base_ebpf:latest"
-	if len(containerName) > 1 && containerName != "" {
-		image = containerName
+	if len(imageName) > 1 && imageName != "" {
+		image = imageName
 	}
 
 	// Get kernel version

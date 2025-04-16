@@ -156,7 +156,7 @@ func GetEBPFSystemdUnits(ctx context.Context, containerID string) ([]EBPFService
 		return nil, fmt.Errorf("Container is not running")
 	}
 
-	command := []string{"find", "/etc/systemd/system", "-maxdepth", "1", "-type", "f", "-name", "ebpf_*", "-printf", "'%f\n'"}
+	command := []string{"find", "/etc/systemd/system", "-maxdepth", "1", "-type", "f", "-name", "ebpf_*", "-printf", "%f\n"}
 	output, err := ContainerExec(ctx, containerID, command)
 	if err != nil {
 		return nil, fmt.Errorf("executing command in container: %w", err)

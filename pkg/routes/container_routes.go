@@ -115,6 +115,10 @@ func RegisterContainerRoutes(router *gin.Engine) {
 					return
 				}
 			}
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error removing log directory: %v", err)
+				return
+			}
 
 			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})
 		})

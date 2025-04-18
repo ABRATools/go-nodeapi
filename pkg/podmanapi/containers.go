@@ -414,6 +414,28 @@ func CreateFromImage(ctx context.Context, imageName string, containerName string
 	spec.Name = containerName
 	spec.Image = imageName
 
+	// get node hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("failed to get hostname: %w", err)
+	}
+
+	// Create log dirs /var/log/$hostname/$containerName
+	baseDir := "/var/log/"
+	jobLogDir := filepath.Join(baseDir, hostname, containerName)
+	if err := os.MkdirAll(jobLogDir, 0755); err != nil {
+		log.Fatalf("failed to create log dir: %v", err)
+	}
+
+	spec.Mounts = []specs.Mount{
+		{
+			Source:      jobLogDir,
+			Destination: "/var/log/",
+			Type:        "bind",
+			Options:     []string{"rw"},
+		},
+	}
+
 	ctrData, err := containersCreate(ctx, spec, nil)
 	if err != nil {
 		return "", err
@@ -435,6 +457,28 @@ func CreateFromImageWithStaticIP(ctx context.Context, imageName string, containe
 		}
 	} else {
 		return "", fmt.Errorf("Static IP cannot be nil")
+	}
+
+	// get node hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("failed to get hostname: %w", err)
+	}
+
+	// Create log dirs /var/log/$hostname/$containerName
+	baseDir := "/var/log/"
+	jobLogDir := filepath.Join(baseDir, hostname, containerName)
+	if err := os.MkdirAll(jobLogDir, 0755); err != nil {
+		log.Fatalf("failed to create log dir: %v", err)
+	}
+
+	spec.Mounts = []specs.Mount{
+		{
+			Source:      jobLogDir,
+			Destination: "/var/log/",
+			Type:        "bind",
+			Options:     []string{"rw"},
+		},
 	}
 
 	ctrData, err := containersCreate(ctx, spec, nil)
@@ -557,7 +601,7 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 		},
 		{
 			Source:      jobLogDir,
-			Destination: "/var/log/ebpf",
+			Destination: "/var/log/",
 			Type:        "bind",
 			Options:     []string{"rw"},
 		},

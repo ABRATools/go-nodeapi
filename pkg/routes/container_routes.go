@@ -124,14 +124,13 @@ func RegisterContainerRoutes(router *gin.Engine) {
 		})
 
 		type CreateContainerRequest struct {
-			Image string `json:"image" binding:"required"`
-			Name  string `json:"name" binding:"required"`
-			IP    string `json:"ip"`
+			Image    string  `json:"image" binding:"required"`
+			Name     string  `json:"name" binding:"required"`
+			IP       string  `json:"ip"`
+			CPUs     float64 `json:"cpus"`
+			MemLimit int64   `json:"mem_limit"`
 		}
-		// expects data in form-data in the format:
-		// image: <image name>
-		// name: <container name>
-		// ip: <static container ip> (optional)
+
 		api.POST("/create", func(c *gin.Context) {
 			var req CreateContainerRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -163,14 +162,14 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				// create a static IP
 				ip = net.ParseIP(req.IP)
 				// create the container
-				containerID, err = podmanapi.CreateFromImageWithStaticIP(podmanContext, imageName, containerName, ip)
+				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName, ip, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
 				}
 			} else {
 				// create the container
-				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName)
+				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName, nil, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
@@ -241,14 +240,14 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				// create a static IP
 				ip = net.ParseIP(req.IP)
 				// create the container
-				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, ip)
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, ip, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
 				}
 			} else {
 				// create the container
-				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, nil)
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, nil, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return

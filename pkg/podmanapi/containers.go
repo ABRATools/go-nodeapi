@@ -408,44 +408,13 @@ func StopPodmanContainer(ctx context.Context, containerID string) (PodmanContain
 	}, nil
 }
 
-func CreateFromImage(ctx context.Context, imageName string, containerName string) (string, error) {
-	fmt.Println("Creating container...")
-	spec := new(specgen.SpecGenerator)
-	spec.Name = containerName
-	spec.Image = imageName
-
-	// get node hostname
-	hostname, err := os.Hostname()
-	if err != nil {
-		return "", fmt.Errorf("failed to get hostname: %w", err)
+func CreateFromImage(ctx context.Context, imageName string, containerName string, static_ip net.IP, CPUs float64, MemLimit int64) (string, error) {
+	if CPUs < 0 {
+		return "", fmt.Errorf("CPUs must be greater than 0")
 	}
-
-	// Create log dirs /var/log/$hostname/$containerName
-	baseDir := "/var/log/"
-	jobLogDir := filepath.Join(baseDir, hostname, containerName)
-	if err := os.MkdirAll(jobLogDir, 0755); err != nil {
-		log.Fatalf("failed to create log dir: %v", err)
+	if MemLimit < 0 {
+		return "", fmt.Errorf("Memory limit must be greater than 0")
 	}
-
-	spec.Mounts = []specs.Mount{
-		{
-			Source:      jobLogDir,
-			Destination: "/var/log/",
-			Type:        "bind",
-			Options:     []string{"rw"},
-		},
-	}
-
-	ctrData, err := containersCreate(ctx, spec, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return ctrData.ID, nil
-}
-
-func CreateFromImageWithStaticIP(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
-	fmt.Println("Creating container with static IP...")
 	spec := new(specgen.SpecGenerator)
 	spec.Name = containerName
 	spec.Image = imageName
@@ -455,10 +424,7 @@ func CreateFromImageWithStaticIP(ctx context.Context, imageName string, containe
 				StaticIPs: []net.IP{static_ip},
 			},
 		}
-	} else {
-		return "", fmt.Errorf("Static IP cannot be nil")
 	}
-
 	// get node hostname
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -479,6 +445,21 @@ func CreateFromImageWithStaticIP(ctx context.Context, imageName string, containe
 			Type:        "bind",
 			Options:     []string{"rw"},
 		},
+	}
+
+	spec.ResourceLimits = new(specs.LinuxResources)
+
+	if CPUs != 0 {
+		period, quota := utils.CalculateQuotaAndPeriod(CPUs)
+
+		// set CPU and memory limits
+		spec.ResourceLimits.CPU = new(specs.LinuxCPU)
+		spec.ResourceLimits.CPU.Period = utils.GetPtr(period)
+		spec.ResourceLimits.CPU.Quota = utils.GetPtr(quota)
+	}
+	if MemLimit != 0 {
+		spec.ResourceLimits.Memory = new(specs.LinuxMemory)
+		spec.ResourceLimits.Memory.Limit = utils.GetPtr(MemLimit)
 	}
 
 	ctrData, err := containersCreate(ctx, spec, nil)
@@ -535,12 +516,17 @@ func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 	return inspectData.NetworkSettings.IPAddress, nil
 }
 
-func CreateEBPFContainer(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
+func CreateEBPFContainer(ctx context.Context, imageName string, containerName string, static_ip net.IP, CPUs float64, MemLimit int64) (string, error) {
 	image := "base_ebpf:latest"
 	if len(imageName) > 1 && imageName != "" {
 		image = imageName
 	}
-
+	if CPUs < 0 {
+		return "", fmt.Errorf("CPUs must be greater than 0")
+	}
+	if MemLimit < 0 {
+		return "", fmt.Errorf("Memory limit must be greater than 0")
+	}
 	// Get kernel version
 	kernelVer, err := exec.Command("uname", "-r").Output()
 	if err != nil {
@@ -584,6 +570,22 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 			},
 		}
 	}
+
+	spec.ResourceLimits = new(specs.LinuxResources)
+
+	if CPUs != 0 {
+		period, quota := utils.CalculateQuotaAndPeriod(CPUs)
+
+		// set CPU and memory limits
+		spec.ResourceLimits.CPU = new(specs.LinuxCPU)
+		spec.ResourceLimits.CPU.Period = utils.GetPtr(period)
+		spec.ResourceLimits.CPU.Quota = utils.GetPtr(quota)
+	}
+	if MemLimit != 0 {
+		spec.ResourceLimits.Memory = new(specs.LinuxMemory)
+		spec.ResourceLimits.Memory.Limit = utils.GetPtr(MemLimit)
+	}
+
 	spec.Privileged = utils.GetPtr(true)
 
 	spec.Mounts = []specs.Mount{

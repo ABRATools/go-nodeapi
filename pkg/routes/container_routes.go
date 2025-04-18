@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sonarping/go-nodeapi/pkg/nginxtemplates"
@@ -99,8 +100,14 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				return
 			}
 
-			// remove the /var/log/abra/<container_name> directory if it exists
-			logDir := "/var/log/abra/" + id
+			hostname, err := os.Hostname()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error getting hostname: %v", err)
+				return
+			}
+			baseLogDir := "/var/log/"
+			logDir := filepath.Join(baseLogDir, hostname, id)
+
 			if _, err := os.Stat(logDir); !os.IsNotExist(err) {
 				err = os.RemoveAll(logDir)
 				if err != nil {

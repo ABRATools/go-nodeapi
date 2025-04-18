@@ -491,74 +491,6 @@ func GetIPAddress(ctx context.Context, containerID string) (string, error) {
 	return inspectData.NetworkSettings.IPAddress, nil
 }
 
-// func CreateEBPFContainer(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
-// 	image := "base_ebpf:latest"
-// 	if len(imageName) > 1 && imageName != "" {
-// 		image = imageName
-// 	}
-
-// 	// Get kernel version
-// 	kernelVer, err := exec.Command("uname", "-r").Output()
-// 	if err != nil {
-// 		log.Fatalf("failed to get kernel version: %v", err)
-// 	}
-// 	// Remove trailing newline character
-// 	kernel := string(kernelVer[:len(kernelVer)-1])
-
-// 	jobID := ""
-// 	if len(containerName) > 1 && containerName != "" {
-// 		jobID = containerName
-// 	} else {
-// 		// Generate 12 character random hex string for job ID
-// 		bytes := make([]byte, 12)
-// 		if _, err := rand.Read(bytes); err != nil {
-// 			log.Fatalf("failed to generate job ID: %v", err)
-// 		}
-// 		jobID = hex.EncodeToString(bytes)
-// 	}
-
-// 	// Create log dirs
-// 	baseDir := "/var/log/abra"
-// 	jobLogDir := filepath.Join(baseDir, jobID)
-// 	if err := os.MkdirAll(jobLogDir, 0755); err != nil {
-// 		log.Fatalf("failed to create log dir: %v", err)
-// 	}
-
-// 	args := []string{
-// 		"run",
-// 		"--name", jobID,
-// 		"--privileged",
-// 		"--tmpfs", "/run",
-// 		"--tmpfs", "/run/lock",
-// 		"-v", "/sys/fs/cgroup:/sys/fs/cgroup:rw",
-// 		"-v", fmt.Sprintf("/usr/src/kernels/%s:/usr/src/kernels/%s:ro", kernel, kernel),
-// 		"-v", fmt.Sprintf("/lib/modules/%s:/lib/modules/%s:ro", kernel, kernel),
-// 		"-v", fmt.Sprintf("%s:/var/log/ebpf:rw", jobLogDir),
-// 		"-p", "5801:5801",
-// 		"-p", "7681:7681",
-// 		"--cap-add", "audit_write",
-// 		"--cap-add", "audit_control",
-// 		"-d", image,
-// 	}
-
-// 	cmd := exec.Command("podman", args...)
-// 	cmd.Stdout = os.Stdout
-// 	cmd.Stderr = os.Stderr
-
-// 	// fmt.Printf("Running: podman %s\n", strings.Join(args, " "))
-// 	if err := cmd.Run(); err != nil {
-// 		return "", fmt.Errorf("failed to run podman command: %v", err)
-// 	}
-// 	ctrData, err := containersInspect(ctx, jobID, &containers.InspectOptions{})
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	return ctrData.ID, nil
-// }
-
-// imageName string, containerName string, static_ip net.IP
-
 func CreateEBPFContainer(ctx context.Context, imageName string, containerName string, static_ip net.IP) (string, error) {
 	image := "base_ebpf:latest"
 	if len(imageName) > 1 && imageName != "" {
@@ -585,9 +517,15 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 		jobID = hex.EncodeToString(bytes)
 	}
 
-	// Create log dirs
-	baseDir := "/var/log/abra"
-	jobLogDir := filepath.Join(baseDir, jobID)
+	// get node hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", fmt.Errorf("failed to get hostname: %w", err)
+	}
+
+	// Create log dirs /var/log/$hostname/$jobID
+	baseDir := "/var/log/"
+	jobLogDir := filepath.Join(baseDir, hostname, jobID)
 	if err := os.MkdirAll(jobLogDir, 0755); err != nil {
 		log.Fatalf("failed to create log dir: %v", err)
 	}
@@ -602,7 +540,7 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 			},
 		}
 	}
-	spec.Privileged = utils.GetPtr(true)
+	spec.Privileged = utils.GetPtr(false)
 
 	spec.Mounts = []specs.Mount{
 		{
@@ -642,11 +580,11 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 			Options:     []string{"rw", "nosuid", "nodev", "noexec"},
 		},
 	}
-	spec.PortMappings = []nettypes.PortMapping{
-		{HostPort: 5801, ContainerPort: 5801},
-		{HostPort: 7681, ContainerPort: 7681},
-	}
-	spec.CapAdd = []string{"audit_write", "audit_control"}
+	// spec.PortMappings = []nettypes.PortMapping{
+	// 	{HostPort: 5801, ContainerPort: 5801},
+	// 	{HostPort: 7681, ContainerPort: 7681},
+	// }
+	spec.CapAdd = []string{"CAP_BPF", "CAP_SYS_ADMIN"}
 	spec.Terminal = utils.GetPtr(false)
 
 	ctrData, err := containersCreate(ctx, spec, nil)

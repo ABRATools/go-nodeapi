@@ -540,7 +540,7 @@ func CreateEBPFContainer(ctx context.Context, imageName string, containerName st
 			},
 		}
 	}
-	spec.Privileged = utils.GetPtr(false)
+	spec.Privileged = utils.GetPtr(true)
 
 	spec.Mounts = []specs.Mount{
 		{

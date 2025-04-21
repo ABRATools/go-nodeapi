@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -107,8 +108,10 @@ func RegisterContainerRoutes(router *gin.Engine) {
 			}
 			baseLogDir := "/var/log/"
 			logDir := filepath.Join(baseLogDir, hostname, id)
-
-			if _, err := os.Stat(logDir); !os.IsNotExist(err) {
+			log.Printf("Attempting to remove path: %s", logDir)
+			fileStat, err := os.Stat(logDir)
+			log.Printf("File stat: %v", fileStat)
+			if !os.IsNotExist(err) {
 				err = os.RemoveAll(logDir)
 				if err != nil {
 					c.String(http.StatusInternalServerError, "Error removing log directory: %v", err)

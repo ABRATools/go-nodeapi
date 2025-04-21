@@ -83,19 +83,28 @@ func RegisterContainerRoutes(router *gin.Engine) {
 
 			c.JSON(http.StatusOK, status)
 		})
-		api.POST("/remove/:id", func(c *gin.Context) {
+		type DeleteContainerRequest struct {
+			EnvironmentID   string `json:"env_id" binding:"required"`
+			EnvironmentName string `json:"env_name" binding:"required"`
+		}
+		api.POST("/remove/", func(c *gin.Context) {
+			var req DeleteContainerRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			}
 			podmanContext, err := podmanapi.InitPodmanConnection()
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
 			}
-			id := c.Param("id")
+			id := req.EnvironmentID
+			name := req.EnvironmentName
 			err = podmanapi.RemovePodmanContainer(podmanContext, id)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error removing Podman Containers: %v", err)
 				return
 			}
 			// remove nginx config
-			err = nginxtemplates.DeleteNginxConfig(id)
+			err = nginxtemplates.DeleteNginxConfig(name)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error removing Nginx Config: %v", err)
 				return
@@ -107,7 +116,7 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				return
 			}
 			baseLogDir := "/var/log/"
-			logDir := filepath.Join(baseLogDir, hostname, id)
+			logDir := filepath.Join(baseLogDir, hostname, name)
 			log.Printf("Attempting to remove path: %s", logDir)
 			fileStat, err := os.Stat(logDir)
 			log.Printf("File stat: %v", fileStat)

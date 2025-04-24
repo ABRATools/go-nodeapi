@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,13 +15,67 @@ import (
 	"github.com/sonarping/go-nodeapi/pkg/routes"
 )
 
+type bodyLogWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w *bodyLogWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)                  // capture for logging
+	return w.ResponseWriter.Write(b) // write out as normal
+}
+
+func LoggingMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+
+		var reqBody []byte
+		if c.Request.Body != nil {
+			reqBody, _ = io.ReadAll(c.Request.Body)
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBody))
+		}
+
+		blw := &bodyLogWriter{body: new(bytes.Buffer), ResponseWriter: c.Writer}
+		c.Writer = blw
+
+		// let the handler ruN
+		c.Next()
+
+		latency := time.Since(start)
+		status := c.Writer.Status()
+		clientIP := c.ClientIP()
+		method := c.Request.Method
+		path := c.Request.URL.Path
+		respBody := blw.body.String()
+
+		log.Printf(
+			`{"time":"%s", "client_ip":"%s", "method":"%s", "path":"%s", `+
+				`"status":%d, "latency_ms":%d, "request":"%s", "response":"%s"}`,
+			start.Format(time.RFC3339),
+			clientIP,
+			method,
+			path,
+			status,
+			latency.Milliseconds(),
+			sanitize(reqBody),
+			sanitize([]byte(respBody)),
+		)
+	}
+}
+
+func sanitize(b []byte) string {
+	s := string(b)
+	s = string(bytes.ReplaceAll([]byte(s), []byte{'\n'}, []byte{' '}))
+	s = string(bytes.ReplaceAll([]byte(s), []byte{'"'}, []byte{'`'}))
+	return s
+}
+
 func main() {
-	// gin.SetMode(gin.ReleaseMode)
+	gin.SetMode(gin.ReleaseMode)
 	router := gin.New()
 	gin.DefaultWriter = os.Stdout
 	// set middleware for all groups
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	router.Use(LoggingMiddleware(), gin.Recovery())
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},

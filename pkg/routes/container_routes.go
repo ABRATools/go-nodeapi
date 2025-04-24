@@ -1,9 +1,11 @@
 package routes
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sonarping/go-nodeapi/pkg/nginxtemplates"
@@ -81,46 +83,66 @@ func RegisterContainerRoutes(router *gin.Engine) {
 
 			c.JSON(http.StatusOK, status)
 		})
-		api.POST("/remove/:id", func(c *gin.Context) {
+		type DeleteContainerRequest struct {
+			EnvironmentID   string `json:"env_id" binding:"required"`
+			EnvironmentName string `json:"env_name" binding:"required"`
+		}
+		api.POST("/remove/", func(c *gin.Context) {
+			var req DeleteContainerRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
+			}
 			podmanContext, err := podmanapi.InitPodmanConnection()
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error connecting to Podman Socket: %v", err)
 			}
-			id := c.Param("id")
+			id := req.EnvironmentID
+			name := req.EnvironmentName
 			err = podmanapi.RemovePodmanContainer(podmanContext, id)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error removing Podman Containers: %v", err)
 				return
 			}
 			// remove nginx config
-			err = nginxtemplates.DeleteNginxConfig(id)
+			err = nginxtemplates.DeleteNginxConfig(name)
 			if err != nil {
 				c.String(http.StatusInternalServerError, "Error removing Nginx Config: %v", err)
 				return
 			}
 
-			// remove the /var/log/abra/<container_name> directory if it exists
-			logDir := "/var/log/abra/" + id
-			if _, err := os.Stat(logDir); !os.IsNotExist(err) {
+			hostname, err := os.Hostname()
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error getting hostname: %v", err)
+				return
+			}
+			baseLogDir := "/var/log/"
+			logDir := filepath.Join(baseLogDir, hostname, name)
+			log.Printf("Attempting to remove path: %s", logDir)
+			fileStat, err := os.Stat(logDir)
+			log.Printf("File stat: %v", fileStat)
+			if !os.IsNotExist(err) {
 				err = os.RemoveAll(logDir)
 				if err != nil {
 					c.String(http.StatusInternalServerError, "Error removing log directory: %v", err)
 					return
 				}
 			}
+			if err != nil {
+				c.String(http.StatusInternalServerError, "Error removing log directory: %v", err)
+				return
+			}
 
 			c.JSON(http.StatusOK, gin.H{"status": "Container removed successfully"})
 		})
 
 		type CreateContainerRequest struct {
-			Image string `json:"image" binding:"required"`
-			Name  string `json:"name" binding:"required"`
-			IP    string `json:"ip"`
+			Image    string  `json:"image" binding:"required"`
+			Name     string  `json:"name" binding:"required"`
+			IP       string  `json:"ip"`
+			CPUs     float64 `json:"cpus"`
+			MemLimit int64   `json:"mem_limit"`
 		}
-		// expects data in form-data in the format:
-		// image: <image name>
-		// name: <container name>
-		// ip: <static container ip> (optional)
+
 		api.POST("/create", func(c *gin.Context) {
 			var req CreateContainerRequest
 			if err := c.ShouldBindJSON(&req); err != nil {
@@ -152,14 +174,14 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				// create a static IP
 				ip = net.ParseIP(req.IP)
 				// create the container
-				containerID, err = podmanapi.CreateFromImageWithStaticIP(podmanContext, imageName, containerName, ip)
+				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName, ip, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
 				}
 			} else {
 				// create the container
-				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName)
+				containerID, err = podmanapi.CreateFromImage(podmanContext, imageName, containerName, nil, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
@@ -230,14 +252,14 @@ func RegisterContainerRoutes(router *gin.Engine) {
 				// create a static IP
 				ip = net.ParseIP(req.IP)
 				// create the container
-				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, ip)
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, ip, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return
 				}
 			} else {
 				// create the container
-				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, nil)
+				containerID, err = podmanapi.CreateEBPFContainer(podmanContext, imageName, containerName, nil, req.CPUs, req.MemLimit)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 					return

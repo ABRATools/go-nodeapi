@@ -1,4 +1,0 @@
-Switch to Gin because its easier
-Implement Auth tokens for cookie-based authentication and authorization
-Start container in its own podman network
-have creation of new container append config file to nginx config folder, allowing for reverse proxying of ttyd and novnc

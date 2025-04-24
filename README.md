@@ -1,2 +1,3 @@
-# go-nodeapi
-go daemon to be run on nodes under ABRA, controls ebpf and provides observation and control capabilities
+# ABRA Node API
+
+Daemon written in Go which controls and monitors Podman containers
